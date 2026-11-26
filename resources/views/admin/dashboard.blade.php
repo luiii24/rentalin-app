@@ -102,14 +102,14 @@
                 </div>
             </div>
 
-            <!-- AKSI CEPAT KE TAB LAIN -->
+            <!-- AKSI CEPAT KE HALAMAN LAIN (SPA TANPA RELOAD) -->
             <div class="pt-3 flex flex-wrap items-center gap-2.5">
-                <a href="{{ Route::has('admin.transactions') ? route('admin.transactions') : url('/portal/admin/transactions') }}"
+                <a href="{{ route('admin.transactions') }}" data-admin-spa
                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover text-white text-xs font-extrabold transition">
                     <i class="bi bi-qr-code-scan"></i> Buka Scan QR &amp; Transaksi
                 </a>
 
-                <a href="{{ Route::has('admin.fleet') ? route('admin.fleet') : url('/portal/admin/fleet') }}"
+                <a href="{{ route('admin.vehicles.index') }}" data-admin-spa
                    class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition">
                     <i class="bi bi-car-front"></i> Kelola Armada
                 </a>
@@ -125,15 +125,15 @@
                         <p class="text-xs text-gray-400 mt-0.5">Gambar QRIS ini otomatis tampil di semua Nota Digital penyewa</p>
                     </div>
                     <span id="qris-status-pill" class="px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-extrabold">
-                        Aktif
+                        Aktif (Dummy)
                     </span>
                 </div>
 
                 <input type="file" id="store-qris-input" accept="image/*" class="hidden" onchange="handleStoreQrisUpload(this)">
 
                 <div onclick="document.getElementById('store-qris-input').click()"
-                     class="bg-brand-canvas hover:opacity-95 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition min-h-[180px]">
-                    <div id="store-qris-empty" class="flex flex-col items-center">
+                     class="bg-brand-canvas hover:opacity-95 rounded-2xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition min-h-[195px]">
+                    <div id="store-qris-empty" class="hidden flex-col items-center">
                         <div class="w-11 h-11 rounded-2xl bg-white text-brand-pink flex items-center justify-center text-lg mb-2">
                             <i class="bi bi-qr-code"></i>
                         </div>
@@ -141,9 +141,9 @@
                         <p class="text-[11px] text-gray-400 mt-0.5">Format PNG / JPG (Rasio kotak 1:1 disarankan)</p>
                     </div>
 
-                    <div id="store-qris-preview-box" class="hidden flex-col items-center gap-2">
-                        <img id="store-qris-preview-img" src="" alt="QRIS Toko" class="w-36 h-36 object-contain rounded-xl bg-white p-2 shadow-2xs">
-                        <span class="text-[11px] font-bold text-brand-pink">Klik gambar untuk mengganti foto QRIS</span>
+                    <div id="store-qris-preview-box" class="flex flex-col items-center gap-2">
+                        <img id="store-qris-preview-img" src="" alt="QRIS Toko" class="w-40 h-40 object-contain rounded-2xl bg-white p-2 shadow-2xs border border-gray-200/70">
+                        <span id="store-qris-caption" class="text-[11px] font-bold text-brand-pink">Klik gambar untuk mengganti foto QRIS</span>
                     </div>
                 </div>
             </div>
@@ -155,20 +155,20 @@
                 </button>
                 <button type="button" id="btn-reset-qris" onclick="resetStoreQris()"
                     class="hidden py-2.5 px-3.5 rounded-full bg-brand-canvas hover:opacity-85 text-gray-500 text-xs font-extrabold transition cursor-pointer">
-                    Hapus
+                    Reset Dummy
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- RINGKASAN AKTIVITAS TERBARU (5 DATA TERAKHIR) -->
+    <!-- RINGKASAN AKTIVITAS TERBARU -->
     <div class="bg-white rounded-3xl p-6">
         <div class="flex items-center justify-between mb-4">
             <div>
                 <h2 class="text-base font-extrabold text-brand-ink">Aktivitas Penyewaan Terbaru</h2>
                 <p class="text-xs text-gray-400 mt-0.5">Pantauan cepat pesanan masuk terbaru</p>
             </div>
-            <a href="{{ Route::has('admin.transactions') ? route('admin.transactions') : url('/portal/admin/transactions') }}"
+            <a href="{{ route('admin.transactions') }}" data-admin-spa
                class="text-xs font-extrabold text-brand-pink hover:underline">
                 Lihat Semua &amp; Scan QR →
             </a>
@@ -192,7 +192,7 @@
                 </div>
                 <div class="flex items-center justify-between sm:justify-end gap-4">
                     <span class="text-sm font-extrabold text-brand-ink">Rp 700.000</span>
-                    <a href="{{ Route::has('admin.transactions') ? route('admin.transactions') : url('/portal/admin/transactions') }}"
+                    <a href="{{ route('admin.transactions') }}" data-admin-spa
                        class="px-3.5 py-1.5 rounded-full bg-white text-brand-ink text-[11px] font-extrabold hover:opacity-85 transition">
                         Proses
                     </a>
@@ -226,25 +226,72 @@
     </div>
 
     <script>
-        function renderStoreQrisPreview() {
-            const savedQris = localStorage.getItem('rentalin_store_qris_image');
-            const emptyBox  = document.getElementById('store-qris-empty');
-            const prevBox   = document.getElementById('store-qris-preview-box');
-            const prevImg   = document.getElementById('store-qris-preview-img');
-            const resetBtn  = document.getElementById('btn-reset-qris');
+        window.DEFAULT_DUMMY_QRIS = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+            <svg xmlns="http://www.w3.org/2000/svg" width="320" height="320" viewBox="0 0 320 320">
+                <rect width="320" height="320" rx="20" fill="#FFFFFF"/>
+                <rect x="8" y="8" width="304" height="304" rx="16" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="2"/>
+                <rect x="24" y="20" width="54" height="20" rx="5" fill="#FF385C"/>
+                <text x="51" y="34" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF">QRIS</text>
+                <text x="296" y="34" text-anchor="end" font-family="sans-serif" font-size="9" font-weight="bold" fill="#64748B">GPN • BI STANDARD</text>
+                <text x="160" y="60" text-anchor="middle" font-family="sans-serif" font-size="13" font-weight="bold" fill="#0F172A">RENTALIN SURABAYA</text>
+                <text x="160" y="75" text-anchor="middle" font-family="monospace" font-size="9.5" fill="#64748B">NMID : ID20261127889901</text>
 
-            if (savedQris) {
-                emptyBox.classList.add('hidden');
-                prevBox.classList.remove('hidden');
-                prevBox.classList.add('flex');
-                prevImg.src = savedQris;
+                <!-- Frame QR -->
+                <g transform="translate(75, 88)" fill="#0F172A">
+                    <!-- Finder Top-Left -->
+                    <path d="M0 0h42v42H0V0zm6 6v30h30V6H6zm6 6h18v18H12V12z"/>
+                    <!-- Finder Top-Right -->
+                    <path d="M128 0h42v42h-42V0zm6 6v30h30V6h-30zm6 6h18v18h-18V12z"/>
+                    <!-- Finder Bottom-Left -->
+                    <path d="M0 128h42v42H0v-42zm6 6v30h30v-30H6zm6 6h18v18H12v-18z"/>
+
+                    <!-- Data Modules -->
+                    <rect x="52" y="4" width="8" height="8"/><rect x="68" y="4" width="16" height="8"/><rect x="96" y="4" width="8" height="16"/><rect x="112" y="12" width="8" height="8"/>
+                    <rect x="52" y="20" width="8" height="16"/><rect x="76" y="24" width="12" height="8"/><rect x="108" y="28" width="12" height="8"/>
+                    <rect x="8" y="52" width="16" height="8"/><rect x="32" y="52" width="8" height="16"/><rect x="52" y="52" width="12" height="8"/><rect x="104" y="52" width="16" height="8"/><rect x="132" y="52" width="8" height="16"/><rect x="152" y="52" width="14" height="8"/>
+                    <rect x="4" y="72" width="8" height="16"/><rect x="20" y="76" width="16" height="8"/><rect x="48" y="72" width="12" height="12"/><rect x="112" y="72" width="12" height="12"/><rect x="136" y="76" width="16" height="8"/><rect x="160" y="72" width="8" height="16"/>
+                    <rect x="8" y="96" width="12" height="8"/><rect x="28" y="96" width="16" height="8"/><rect x="52" y="96" width="8" height="16"/><rect x="108" y="96" width="8" height="16"/><rect x="128" y="96" width="16" height="8"/><rect x="154" y="96" width="12" height="8"/>
+                    <rect x="52" y="124" width="16" height="8"/><rect x="76" y="120" width="8" height="16"/><rect x="96" y="124" width="16" height="8"/><rect x="124" y="124" width="24" height="24" fill="none" stroke="#0F172A" stroke-width="5"/><rect x="133" y="133" width="6" height="6"/><rect x="158" y="124" width="10" height="12"/>
+                    <rect x="52" y="144" width="8" height="12"/><rect x="68" y="148" width="16" height="8"/><rect x="92" y="144" width="12" height="16"/><rect x="112" y="156" width="16" height="10"/><rect x="138" y="154" width="12" height="12"/><rect x="158" y="146" width="10" height="20"/>
+
+                    <!-- Center Badge -->
+                    <rect x="67" y="67" width="36" height="36" rx="8" fill="#F3C64F"/>
+                    <text x="85" y="91" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="bold" fill="#1E1E1E">R</text>
+                </g>
+
+                <text x="160" y="280" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#475569">SATU QRIS UNTUK SEMUA PEMBAYARAN</text>
+                <text x="160" y="294" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#94A3B8">GoPay • OVO • DANA • ShopeePay • Mobile Banking</text>
+            </svg>
+        `);
+
+        function renderStoreQrisPreview() {
+            let savedQris = localStorage.getItem('rentalin_store_qris_image');
+            if (!savedQris) {
+                savedQris = window.DEFAULT_DUMMY_QRIS;
+                try {
+                    localStorage.setItem('rentalin_store_qris_image', savedQris);
+                } catch (e) {}
+            }
+
+            const isCustom   = savedQris !== window.DEFAULT_DUMMY_QRIS;
+            const emptyBox   = document.getElementById('store-qris-empty');
+            const prevBox    = document.getElementById('store-qris-preview-box');
+            const prevImg    = document.getElementById('store-qris-preview-img');
+            const resetBtn   = document.getElementById('btn-reset-qris');
+            const statusPill = document.getElementById('qris-status-pill');
+            if (!emptyBox || !prevBox) return;
+
+            emptyBox.classList.add('hidden');
+            prevBox.classList.remove('hidden');
+            prevBox.classList.add('flex');
+            prevImg.src = savedQris;
+
+            if (isCustom) {
                 resetBtn.classList.remove('hidden');
+                if (statusPill) statusPill.innerText = 'QRIS Custom Aktif';
             } else {
-                emptyBox.classList.remove('hidden');
-                prevBox.classList.add('hidden');
-                prevBox.classList.remove('flex');
-                prevImg.src = '';
                 resetBtn.classList.add('hidden');
+                if (statusPill) statusPill.innerText = 'Aktif (Dummy)';
             }
         }
 
@@ -264,7 +311,7 @@
         }
 
         function resetStoreQris() {
-            localStorage.removeItem('rentalin_store_qris_image');
+            localStorage.setItem('rentalin_store_qris_image', window.DEFAULT_DUMMY_QRIS);
             document.getElementById('store-qris-input').value = '';
             renderStoreQrisPreview();
         }

@@ -202,31 +202,42 @@
         </div>
     </div>
 
-    <!-- FILTER & DAFTAR TRANSAKSI -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+    <!-- HEADER, GLOBAL SEARCH BAR & FILTER -->
+    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-3 mb-4">
         <div>
             <h2 class="text-sm sm:text-base font-extrabold text-brand-ink">Daftar Transaksi Penyewaan</h2>
-            <p class="text-xs text-gray-400">Total <strong class="text-brand-ink">{{ count($normalizedRentals) }}</strong> transaksi</p>
+            <p class="text-xs text-gray-400">
+                Menampilkan <strong id="tx-visible-count" class="text-brand-ink">{{ count($normalizedRentals) }}</strong> dari <strong class="text-brand-ink">{{ count($normalizedRentals) }}</strong> transaksi
+            </p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2.5">
-            <div class="w-48">
-                <x-datepicker name="filter_date" id="tx-filter-date" :value="request('date', date('Y-m-d'))" />
-            </div>
-            <div class="w-48">
-                <x-select
-                    name="filter_status"
-                    id="tx-filter-status"
-                    :options="[
-                        'all' => 'Semua Status',
-                        'menunggu_konfirmasi' => 'Menunggu Konfirmasi',
-                        'menunggu_pembayaran' => 'Menunggu Pembayaran',
-                        'siap_diambil' => 'Lunas / Siap Diambil',
-                        'disewa' => 'Sedang Disewa',
-                    ]"
-                    selected="all"
-                    onchange="filterTransactionsTable"
-                />
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2.5">
+            <x-search-bar
+                id="tx-search-input"
+                placeholder="Cari kode, penyewa, unit, plat..."
+                oninput="filterTransactionsTable"
+                widthClass="w-full sm:w-72"
+            />
+
+            <div class="flex items-center gap-2.5">
+                <div class="w-44">
+                    <x-datepicker name="filter_date" id="tx-filter-date" :value="request('date', date('Y-m-d'))" />
+                </div>
+                <div class="w-44">
+                    <x-select
+                        name="filter_status"
+                        id="tx-filter-status"
+                        :options="[
+                            'all' => 'Semua Status',
+                            'menunggu_konfirmasi' => 'Menunggu Konfirmasi',
+                            'menunggu_pembayaran' => 'Menunggu Pembayaran',
+                            'siap_diambil' => 'Lunas / Siap Diambil',
+                            'disewa' => 'Sedang Disewa',
+                        ]"
+                        selected="all"
+                        onchange="filterTransactionsTable"
+                    />
+                </div>
             </div>
         </div>
     </div>
@@ -247,11 +258,19 @@
                     : ($item['is_paid']
                         ? 'siap_diambil'
                         : (!empty($item['payment_proof']) ? 'menunggu_konfirmasi' : 'menunggu_pembayaran'));
+                $searchHaystack = strtolower(
+                    $item['booking_code'] . ' ' .
+                    $item['customer_name'] . ' ' .
+                    $item['customer_phone'] . ' ' .
+                    $item['vehicle_name'] . ' ' .
+                    $item['license_plate']
+                );
             @endphp
             <tr data-code="{{ $item['booking_code'] }}"
                 data-state="{{ $rowState }}"
+                data-search="{{ $searchHaystack }}"
                 onclick="selectTransactionByCode('{{ $item['booking_code'] }}')"
-                class="rental-row cursor-pointer transition">
+                class="rental-row cursor-pointer hover:bg-brand-canvas/40 transition">
                 <td class="py-3.5 pl-5 pr-2" onclick="event.stopPropagation()">
                     <input type="checkbox" class="w-4 h-4 rounded bg-brand-canvas accent-brand-pink cursor-pointer">
                 </td>
@@ -260,34 +279,33 @@
                 </td>
                 <td class="py-3.5 px-4" data-sort="{{ $item['customer_name'] }}">
                     <p class="font-bold text-brand-ink">{{ $item['customer_name'] }}</p>
-                    <p class="text-[11px] text-gray-400">{{ $item['customer_phone'] }}</p>
+                    <p class="text-[11px] text-gray-400" data-format-phone="{{ $item['customer_phone'] }}">{{ $item['customer_phone'] }}</p>
                 </td>
                 <td class="py-3.5 px-4" data-sort="{{ $item['vehicle_name'] }}">
                     <p class="font-bold text-brand-ink">{{ $item['vehicle_name'] }}</p>
                     @if(!empty($item['license_plate']))
-                        <span class="font-mono text-[10px] font-bold text-gray-400">{{ $item['license_plate'] }}</span>
+                        <x-badge variant="plate" class="mt-1 !text-[10px] !py-0.5 !px-2">{{ $item['license_plate'] }}</x-badge>
                     @endif
                 </td>
                 <td class="py-3.5 px-4 text-xs text-gray-500" data-sort="{{ $item['pickup_date'] }}">
-                    <p class="font-semibold text-brand-ink">{{ \Carbon\Carbon::parse($item['pickup_date'])->translatedFormat('d M Y') }}</p>
+                    <p class="font-semibold text-brand-ink" data-format-date="{{ $item['pickup_date'] }}" data-date-mode="short">
+                        {{ $item['pickup_date'] }}
+                    </p>
                     <p class="text-[11px] text-gray-400">{{ $item['duration_days'] }} Hari</p>
                 </td>
-                <td class="py-3.5 px-4 font-extrabold text-brand-ink" data-sort="{{ $item['total_amount'] }}">
+                <td class="py-3.5 px-4 font-extrabold text-brand-ink" data-sort="{{ $item['total_amount'] }}" data-format-rupiah="{{ $item['total_amount'] }}">
                     Rp {{ number_format($item['total_amount'], 0, ',', '.') }}
                 </td>
                 <td class="py-3.5 px-4" data-sort="{{ $rowState }}">
-                    <span class="row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold
-                        {{ $rowState === 'disewa' || $rowState === 'siap_diambil'
-                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                            : ($rowState === 'menunggu_konfirmasi'
-                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400') }}">
-                        {{ $rowState === 'disewa'
-                            ? 'Sedang Disewa'
-                            : ($rowState === 'siap_diambil'
-                                ? 'Siap Diambil'
-                                : ($rowState === 'menunggu_konfirmasi' ? 'Menunggu Konfirmasi' : 'Menunggu Pembayaran')) }}
-                    </span>
+                    @if($rowState === 'disewa')
+                        <x-badge variant="success" :dot="true" class="row-status-badge">Sedang Disewa</x-badge>
+                    @elseif($rowState === 'siap_diambil')
+                        <x-badge variant="success" :dot="true" class="row-status-badge">Siap Diambil</x-badge>
+                    @elseif($rowState === 'menunggu_konfirmasi')
+                        <x-badge variant="info" :dot="true" class="row-status-badge">Menunggu Konfirmasi</x-badge>
+                    @else
+                        <x-badge variant="warning" :dot="true" class="row-status-badge">Menunggu Pembayaran</x-badge>
+                    @endif
                 </td>
                 <td class="py-3.5 px-4 text-right" onclick="event.stopPropagation()">
                     <button type="button" onclick="selectTransactionByCode('{{ $item['booking_code'] }}')"
@@ -297,6 +315,11 @@
                 </td>
             </tr>
         @endforeach
+        <tr id="tx-empty-row" data-empty-row="true" class="hidden">
+            <td colspan="8" class="py-10 text-center text-xs text-gray-400">
+                Tidak ada transaksi yang cocok dengan pencarian atau filter status.
+            </td>
+        </tr>
     </x-table>
 
     <!-- POP-UP 1: VERIFIKASI PEMBAYARAN -->
@@ -312,7 +335,7 @@
                         <p class="text-[11px] text-gray-400">Periksa bukti bayar &amp; pastikan dana sudah masuk</p>
                     </div>
                 </div>
-                <button type="button" onclick="closeModal('confirmPaymentModal')"
+                <button type="button" onclick="RentalinUI.closeModal('confirmPaymentModal')"
                     class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
                     <i class="bi bi-x-lg text-xs"></i>
                 </button>
@@ -368,7 +391,7 @@
             </label>
 
             <div class="flex items-center gap-2.5">
-                <button type="button" onclick="closeModal('confirmPaymentModal')"
+                <button type="button" onclick="RentalinUI.closeModal('confirmPaymentModal')"
                     class="flex-1 py-3 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition cursor-pointer">
                     Tidak
                 </button>
@@ -380,7 +403,7 @@
         </div>
     </div>
 
-    <div id="proofLightboxModal" onclick="closeModal('proofLightboxModal')" class="fixed inset-0 bg-black/80 backdrop-blur-xs z-[70] hidden flex items-center justify-center p-4 cursor-zoom-out">
+    <div id="proofLightboxModal" onclick="RentalinUI.closeModal('proofLightboxModal')" class="fixed inset-0 bg-black/80 backdrop-blur-xs z-[70] hidden flex items-center justify-center p-4 cursor-zoom-out">
         <img id="proof-lightbox-img" src="" alt="Bukti Pembayaran Penuh" class="max-w-full max-h-[88vh] rounded-2xl shadow-2xl object-contain bg-white">
     </div>
 
@@ -397,7 +420,7 @@
                         <p class="text-[11px] text-gray-400">Unggah foto identitas / dokumen jaminan penyewa</p>
                     </div>
                 </div>
-                <button type="button" onclick="closeModal('confirmPickupModal')"
+                <button type="button" onclick="RentalinUI.closeModal('confirmPickupModal')"
                     class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
                     <i class="bi bi-x-lg text-xs"></i>
                 </button>
@@ -451,7 +474,7 @@
                 </div>
 
                 <div class="flex items-center gap-2.5 pt-1">
-                    <button type="button" onclick="closeModal('confirmPickupModal')"
+                    <button type="button" onclick="RentalinUI.closeModal('confirmPickupModal')"
                         class="flex-1 py-3 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition cursor-pointer">
                         Batal
                     </button>
@@ -465,18 +488,16 @@
     </div>
 
     <script>
-        const dashboardRentals = @json($normalizedRentals);
-        dashboardRentals.forEach(item => {
-            const localProof = localStorage.getItem(`rentalin_proof_${item.booking_code}`);
-            if (localProof) item.payment_proof = localProof;
-        });
+        (function() {
+            window.dashboardRentals = @json($normalizedRentals);
+            window.dashboardRentals.forEach(item => {
+                const localProof = localStorage.getItem(`rentalin_proof_${item.booking_code}`);
+                if (localProof) item.payment_proof = localProof;
+            });
 
-        let selectedRental = dashboardRentals[0] || null;
-        let activeVideoStream = null;
-
-        function formatRupiah(num) {
-            return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
-        }
+            window.selectedRental = window.dashboardRentals[0] || null;
+            window.activeVideoStream = null;
+        })();
 
         function getRentalState(rental) {
             if (rental.is_picked_up) return 'disewa';
@@ -486,17 +507,18 @@
         }
 
         function renderSelectedRentalPanel() {
-            if (!selectedRental) return;
-            const state = getRentalState(selectedRental);
+            const rental = window.selectedRental;
+            if (!rental) return;
+            const state = getRentalState(rental);
 
-            document.getElementById('scan-code-input').value = selectedRental.booking_code;
-            document.getElementById('detail-booking-code').innerText = selectedRental.booking_code;
-            document.getElementById('detail-customer-name').innerText = selectedRental.customer_name;
-            document.getElementById('detail-customer-phone').innerText = selectedRental.customer_phone;
-            document.getElementById('detail-vehicle-name').innerText = selectedRental.vehicle_name + (selectedRental.license_plate ? ` (${selectedRental.license_plate})` : '');
-            document.getElementById('detail-schedule-info').innerText = `${selectedRental.pickup_date} (${selectedRental.duration_days} Hari)`;
-            document.getElementById('detail-total-amount').innerText = formatRupiah(selectedRental.total_amount);
-            document.getElementById('detail-invoice-link').href = `/portal/invoice/${encodeURIComponent(selectedRental.booking_code)}`;
+            document.getElementById('scan-code-input').value = rental.booking_code;
+            document.getElementById('detail-booking-code').innerText = rental.booking_code;
+            document.getElementById('detail-customer-name').innerText = rental.customer_name;
+            document.getElementById('detail-customer-phone').innerText = RentalinUI.formatPhone(rental.customer_phone);
+            document.getElementById('detail-vehicle-name').innerText = rental.vehicle_name + (rental.license_plate ? ` (${rental.license_plate})` : '');
+            document.getElementById('detail-schedule-info').innerText = `${RentalinUI.formatDate(rental.pickup_date, 'datetime')} (${rental.duration_days} Hari)`;
+            document.getElementById('detail-total-amount').innerText = RentalinUI.formatRupiah(rental.total_amount);
+            document.getElementById('detail-invoice-link').href = `/portal/invoice/${encodeURIComponent(rental.booking_code)}`;
 
             const statusBadge = document.getElementById('detail-status-badge');
             const btnPay      = document.getElementById('btn-confirm-payment');
@@ -507,19 +529,19 @@
             const labelPickup = document.getElementById('label-confirm-pickup');
             const colInfo     = document.getElementById('detail-collateral-info');
 
-            if (selectedRental.collateral_type) {
-                colInfo.innerText = `Jaminan tersimpan: ${selectedRental.collateral_type}`;
+            if (rental.collateral_type) {
+                colInfo.innerText = `Jaminan tersimpan: ${rental.collateral_type}`;
                 colInfo.classList.remove('hidden');
             } else {
                 colInfo.classList.add('hidden');
             }
 
-            if (selectedRental.is_paid) {
+            if (rental.is_paid) {
                 btnPay.disabled = true;
                 btnPay.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold cursor-default';
                 iconPay.className = 'bi bi-check-circle-fill';
                 labelPay.innerText = 'Pembayaran Sah';
-            } else if (!selectedRental.payment_proof) {
+            } else if (!rental.payment_proof) {
                 btnPay.disabled = true;
                 btnPay.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-gray-200 dark:bg-white/10 text-gray-400 text-xs font-extrabold cursor-not-allowed transition-all';
                 iconPay.className = 'bi bi-lock-fill';
@@ -531,12 +553,12 @@
                 labelPay.innerText = 'Konfirmasi Pembayaran';
             }
 
-            if (!selectedRental.is_paid) {
+            if (!rental.is_paid) {
                 btnPickup.disabled = true;
                 btnPickup.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-gray-200 dark:bg-white/10 text-gray-400 text-xs font-extrabold cursor-not-allowed transition-all';
                 iconPickup.className = 'bi bi-lock-fill';
                 labelPickup.innerText = 'Unit Sudah Diambil';
-            } else if (selectedRental.is_picked_up) {
+            } else if (rental.is_picked_up) {
                 btnPickup.disabled = true;
                 btnPickup.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold cursor-default';
                 iconPickup.className = 'bi bi-car-front-fill';
@@ -562,7 +584,8 @@
                 statusBadge.innerText = 'Menunggu Pembayaran';
             }
 
-            syncTableRowUI(selectedRental);
+            syncTableRowUI(rental);
+            filterTransactionsTable();
         }
 
         function syncTableRowUI(rental) {
@@ -574,29 +597,29 @@
 
             if (badge) {
                 if (state === 'disewa') {
-                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
-                    badge.innerText = 'Sedang Disewa';
+                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Sedang Disewa';
                 } else if (state === 'siap_diambil') {
-                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
-                    badge.innerText = 'Siap Diambil';
+                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Siap Diambil';
                 } else if (state === 'menunggu_konfirmasi') {
-                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-blue-500/15 text-blue-600 dark:text-blue-400';
-                    badge.innerText = 'Menunggu Konfirmasi';
+                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-blue-500/15 text-blue-600 dark:text-blue-400';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Menunggu Konfirmasi';
                 } else {
-                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-amber-500/15 text-amber-600 dark:text-amber-400';
-                    badge.innerText = 'Menunggu Pembayaran';
+                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-amber-500/15 text-amber-600 dark:text-amber-400';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Menunggu Pembayaran';
                 }
             }
         }
 
         function selectTransactionByCode(code) {
             const clean = String(code || '').trim().toUpperCase();
-            const found = dashboardRentals.find(r => r.booking_code.toUpperCase() === clean);
+            const found = window.dashboardRentals.find(r => r.booking_code.toUpperCase() === clean);
             if (!found) {
                 alert(`Kode booking "${clean}" tidak ditemukan.`);
                 return;
             }
-            selectedRental = found;
+            window.selectedRental = found;
             renderSelectedRentalPanel();
         }
 
@@ -606,11 +629,12 @@
         }
 
         function openConfirmPaymentModal() {
-            if (!selectedRental || selectedRental.is_paid || !selectedRental.payment_proof) return;
+            const rental = window.selectedRental;
+            if (!rental || rental.is_paid || !rental.payment_proof) return;
 
-            document.getElementById('pay-modal-code').innerText = selectedRental.booking_code;
-            document.getElementById('pay-modal-customer').innerText = selectedRental.customer_name;
-            document.getElementById('pay-modal-amount').innerText = formatRupiah(selectedRental.total_amount);
+            document.getElementById('pay-modal-code').innerText = rental.booking_code;
+            document.getElementById('pay-modal-customer').innerText = rental.customer_name;
+            document.getElementById('pay-modal-amount').innerText = RentalinUI.formatRupiah(rental.total_amount);
 
             const statusPill = document.getElementById('pay-modal-status-pill');
             const proofWrap  = document.getElementById('pay-modal-proof-wrap');
@@ -621,10 +645,10 @@
 
             cb.checked = false;
 
-            if (selectedRental.payment_proof) {
+            if (rental.payment_proof) {
                 statusPill.className = 'px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-blue-500/15 text-blue-600 dark:text-blue-400';
                 statusPill.innerText = 'Menunggu Konfirmasi';
-                proofImg.src = selectedRental.payment_proof;
+                proofImg.src = rental.payment_proof;
                 proofWrap.classList.remove('hidden');
                 noProof.classList.add('hidden');
                 zoomBtn.classList.remove('hidden');
@@ -639,18 +663,18 @@
             }
 
             toggleLegalPaymentButton();
-            document.getElementById('confirmPaymentModal').classList.remove('hidden');
+            RentalinUI.openModal('confirmPaymentModal');
         }
 
         function openProofLightbox() {
-            if (!selectedRental || !selectedRental.payment_proof) return;
-            document.getElementById('proof-lightbox-img').src = selectedRental.payment_proof;
-            document.getElementById('proofLightboxModal').classList.remove('hidden');
+            if (!window.selectedRental || !window.selectedRental.payment_proof) return;
+            document.getElementById('proof-lightbox-img').src = window.selectedRental.payment_proof;
+            RentalinUI.openModal('proofLightboxModal');
         }
 
         function toggleLegalPaymentButton() {
             const cb = document.getElementById('legal-payment-checkbox');
-            const canConfirm = Boolean(selectedRental && selectedRental.payment_proof && !cb.disabled && cb.checked);
+            const canConfirm = Boolean(window.selectedRental && window.selectedRental.payment_proof && !cb.disabled && cb.checked);
             const btn = document.getElementById('btn-submit-legal-payment');
             btn.disabled = !canConfirm;
             btn.className = canConfirm
@@ -660,21 +684,22 @@
 
         function submitConfirmPayment() {
             const cb = document.getElementById('legal-payment-checkbox');
-            if (!selectedRental || !selectedRental.payment_proof || !cb.checked) return;
-            selectedRental.is_paid = true;
-            closeModal('confirmPaymentModal');
+            if (!window.selectedRental || !window.selectedRental.payment_proof || !cb.checked) return;
+            window.selectedRental.is_paid = true;
+            RentalinUI.closeModal('confirmPaymentModal');
             renderSelectedRentalPanel();
         }
 
         function openConfirmPickupModal() {
-            if (!selectedRental || !selectedRental.is_paid || selectedRental.is_picked_up) return;
-            document.getElementById('pickup-modal-code').innerText = selectedRental.booking_code;
-            document.getElementById('pickup-modal-vehicle').innerText = selectedRental.vehicle_name;
+            const rental = window.selectedRental;
+            if (!rental || !rental.is_paid || rental.is_picked_up) return;
+            document.getElementById('pickup-modal-code').innerText = rental.booking_code;
+            document.getElementById('pickup-modal-vehicle').innerText = rental.vehicle_name;
             document.getElementById('confirmPickupForm').reset();
             document.getElementById('collateral-placeholder').classList.remove('hidden');
             document.getElementById('collateral-placeholder').classList.add('flex');
             document.getElementById('collateral-preview-wrap').classList.add('hidden');
-            document.getElementById('confirmPickupModal').classList.remove('hidden');
+            RentalinUI.openModal('confirmPickupModal');
         }
 
         function previewCollateralFile(input) {
@@ -696,22 +721,25 @@
 
         function submitConfirmPickup(e) {
             e.preventDefault();
-            if (!selectedRental || !selectedRental.is_paid) return;
-            selectedRental.is_picked_up = true;
-            selectedRental.collateral_type = document.getElementById('pickup-collateral-type')?.value || 'KTP Asli';
-            closeModal('confirmPickupModal');
+            if (!window.selectedRental || !window.selectedRental.is_paid) return;
+            window.selectedRental.is_picked_up = true;
+            window.selectedRental.collateral_type = document.getElementById('pickup-collateral-type')?.value || 'KTP Asli';
+            RentalinUI.closeModal('confirmPickupModal');
             renderSelectedRentalPanel();
         }
 
-        function closeModal(id) {
-            const el = document.getElementById(id);
-            if (el) el.classList.add('hidden');
-        }
+        function filterTransactionsTable(statusOverride) {
+            const statusVal = typeof statusOverride === 'string'
+                ? statusOverride
+                : (document.getElementById('tx-filter-status')?.value || 'all');
 
-        function filterTransactionsTable(statusVal) {
-            document.querySelectorAll('.rental-row').forEach(row => {
-                const match = statusVal === 'all' || row.dataset.state === statusVal;
-                row.classList.toggle('hidden', !match);
+            RentalinUI.filterItems({
+                inputId: 'tx-search-input',
+                clearBtnId: 'tx-search-input-clear',
+                itemSelector: '#transactions-table tbody tr.rental-row',
+                countId: 'tx-visible-count',
+                emptyId: 'tx-empty-row',
+                extraPredicate: (row) => statusVal === 'all' || row.dataset.state === statusVal,
             });
         }
 
@@ -723,16 +751,16 @@
             if (!box.classList.contains('hidden')) {
                 box.classList.add('hidden');
                 label.innerText = 'Buka Kamera Scan';
-                if (activeVideoStream) {
-                    activeVideoStream.getTracks().forEach(t => t.stop());
-                    activeVideoStream = null;
+                if (window.activeVideoStream) {
+                    window.activeVideoStream.getTracks().forEach(t => t.stop());
+                    window.activeVideoStream = null;
                 }
                 return;
             }
 
             try {
-                activeVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                video.srcObject = activeVideoStream;
+                window.activeVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                video.srcObject = window.activeVideoStream;
                 box.classList.remove('hidden');
                 label.innerText = 'Tutup Kamera Scan';
             } catch (err) {

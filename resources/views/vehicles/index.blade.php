@@ -1,53 +1,81 @@
 @extends('layouts.admin')
 
-@section('title', 'Kelola Armada')
+@section('title', 'Kelola Armada Kendaraan')
 @section('page-title', 'Kelola Armada Kendaraan')
 
 @section('content')
     @php
-        $categoryOptions = [];
+        $categorySelectOptions = ['all' => 'Semua Kategori'];
+        $formCategoryOptions = [];
         foreach ($categories as $cat) {
-            $categoryOptions[$cat->id] = $cat->name;
+            $categorySelectOptions[$cat->slug] = $cat->name;
+            $formCategoryOptions[$cat->id] = $cat->name;
         }
-
-        $vehicleList = $vehicles instanceof \Illuminate\Pagination\AbstractPaginator
-            ? collect($vehicles->items())
-            : collect($vehicles);
     @endphp
 
-    @if(session('success'))
-        <div class="mb-5 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-between">
-            <span class="flex items-center gap-2"><i class="bi bi-check-circle-fill text-sm"></i> {{ session('success') }}</span>
-            <button type="button" onclick="this.parentElement.remove()" class="opacity-70 hover:opacity-100 cursor-pointer"><i class="bi bi-x-lg"></i></button>
-        </div>
-    @endif
-
-    @if(session('error'))
-        <div class="mb-5 bg-brand-pinkSoft text-brand-pink px-4 py-3 rounded-2xl text-xs font-bold flex items-center justify-between">
-            <span class="flex items-center gap-2"><i class="bi bi-exclamation-circle-fill text-sm"></i> {{ session('error') }}</span>
-            <button type="button" onclick="this.parentElement.remove()" class="opacity-70 hover:opacity-100 cursor-pointer"><i class="bi bi-x-lg"></i></button>
-        </div>
-    @endif
-
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <!-- HEADER HALAMAN -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div>
             <h1 class="text-xl sm:text-2xl font-extrabold text-brand-ink">Daftar Armada</h1>
-            <p class="text-xs text-gray-500">Klik judul kolom bertanda panah untuk mengurutkan data unit</p>
+            <p class="text-xs text-gray-400 mt-0.5">Klik judul kolom bertanda panah untuk mengurutkan data unit</p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2.5">
-            <button type="button" onclick="openCategoryModal()"
-                class="inline-flex items-center justify-center gap-2 bg-white hover:bg-brand-canvas active:scale-95 text-brand-ink text-xs font-extrabold px-4 py-3 rounded-full shadow-2xs transition-all cursor-pointer">
-                <i class="bi bi-tags-fill text-brand-pink"></i> Kelola Kategori
+            <button type="button" onclick="RentalinUI.openModal('categoryModal')"
+                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-white hover:bg-brand-canvas border border-gray-200/80 text-brand-ink text-xs font-extrabold transition shadow-2xs cursor-pointer">
+                <i class="bi bi-tag-fill text-brand-pink"></i> Kelola Kategori
             </button>
 
-            <button type="button" onclick="openAddVehicleModal()"
-                class="inline-flex items-center justify-center gap-2 bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold px-5 py-3 rounded-full shadow-xs transition-all cursor-pointer">
+            <button type="button" onclick="openVehicleModal()"
+                class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold transition shadow-xs cursor-pointer">
                 <i class="bi bi-plus-lg"></i> Tambah Armada
             </button>
         </div>
     </div>
 
+    <!-- BARIS GLOBAL SEARCH BAR & FILTER -->
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-4">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2.5 flex-1">
+            <x-search-bar
+                id="fleet-search-input"
+                placeholder="Cari nama kendaraan, plat nomor, kategori, warna..."
+                oninput="filterFleetTable"
+                widthClass="w-full sm:max-w-md"
+            />
+
+            <div class="flex items-center gap-2.5">
+                <div class="w-44">
+                    <x-select
+                        name="fleet_cat_filter"
+                        id="fleet-filter-category"
+                        :options="$categorySelectOptions"
+                        selected="all"
+                        onchange="filterFleetTable"
+                    />
+                </div>
+                <div class="w-40">
+                    <x-select
+                        name="fleet_status_filter"
+                        id="fleet-filter-status"
+                        :options="[
+                            'all' => 'Semua Status',
+                            'tersedia' => 'Tersedia',
+                            'disewa' => 'Disewa',
+                            'maintenance' => 'Maintenance',
+                        ]"
+                        selected="all"
+                        onchange="filterFleetTable"
+                    />
+                </div>
+            </div>
+        </div>
+
+        <p class="text-xs text-gray-400">
+            Menampilkan <strong id="fleet-visible-count" class="text-brand-ink">{{ count($vehicles) }}</strong> dari <strong class="text-brand-ink">{{ count($vehicles) }}</strong> unit
+        </p>
+    </div>
+
+    <!-- TABEL ARMADA GLOBAL -->
     <x-table id="vehicles-table" :headers="[
         ['label' => 'Nama Kendaraan', 'sortable' => true],
         ['label' => 'Kategori', 'sortable' => true],
@@ -56,638 +84,229 @@
         ['label' => 'Status', 'sortable' => true],
         ['label' => 'Aksi', 'sortable' => false, 'align' => 'right'],
     ]">
-        @forelse($vehicles as $vehicle)
+        @foreach($vehicles as $vehicle)
             @php
-                $images = is_array($vehicle->images) && count($vehicle->images) > 0
-                    ? array_map(fn($img) => str_starts_with($img, 'http') ? $img : asset('storage/' . $img), $vehicle->images)
-                    : ['https://placehold.co/120x90/f3f4f6/9ca3af?text=Unit'];
-                $catName = $vehicle->category->name ?? ($categoryOptions[$vehicle->category_id ?? ''] ?? '-');
+                $thumb = is_array($vehicle->images) && count($vehicle->images) > 0
+                    ? (str_starts_with($vehicle->images[0], 'http') ? $vehicle->images[0] : asset('storage/' . $vehicle->images[0]))
+                    : 'https://placehold.co/120x90/f3f4f6/9ca3af?text=Unit';
+                $catSlug = $vehicle->category->slug ?? 'all';
+                $catName = $vehicle->category->name ?? 'Umum';
+                $plate   = $vehicle->license_plate ?? '-';
+                $metaStr = ($vehicle->spec ?? '') . ($vehicle->color ? ' • ' . $vehicle->color : '') . ($vehicle->year ? ' (' . $vehicle->year . ')' : '');
+                $searchHaystack = strtolower($vehicle->name . ' ' . $plate . ' ' . $catName . ' ' . $metaStr);
             @endphp
-            <tr class="hover:bg-brand-canvas/60 transition">
+            <tr class="vehicle-row hover:bg-brand-canvas/40 transition"
+                data-category="{{ $catSlug }}"
+                data-status="{{ $vehicle->status }}"
+                data-search="{{ $searchHaystack }}">
                 <td class="py-3.5 pl-5 pr-2">
-                    <input type="checkbox" onchange="this.closest('tr').classList.toggle('bg-brand-pinkSoft/25', this.checked)"
-                        class="w-4 h-4 rounded bg-brand-canvas accent-brand-pink cursor-pointer">
+                    <input type="checkbox" class="w-4 h-4 rounded bg-brand-canvas accent-brand-pink cursor-pointer">
                 </td>
-
                 <td class="py-3.5 px-4" data-sort="{{ $vehicle->name }}">
-                    <div class="flex items-center gap-3">
-                        <img src="{{ $images[0] }}" alt="{{ $vehicle->name }}" class="w-11 h-9 rounded-xl object-cover bg-brand-canvas flex-shrink-0">
+                    <div class="flex items-center gap-3.5">
+                        <img src="{{ $thumb }}" alt="{{ $vehicle->name }}"
+                             class="w-12 h-10 rounded-xl object-cover bg-brand-canvas border border-gray-200/70 flex-shrink-0">
                         <div class="min-w-0">
-                            <div class="flex items-center gap-2">
-                                <p class="font-bold text-brand-ink truncate">{{ $vehicle->name }}</p>
-                                @if(!empty($vehicle->license_plate))
-                                    <span class="bg-brand-canvas text-brand-ink font-mono text-[10px] font-extrabold px-2 py-0.5 rounded-md flex-shrink-0">
-                                        {{ $vehicle->license_plate }}
-                                    </span>
-                                @endif
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-extrabold text-brand-ink text-xs sm:text-sm">{{ $vehicle->name }}</span>
+                                <x-badge variant="plate" class="!text-[10px] !py-0.5 !px-2">{{ $plate }}</x-badge>
                             </div>
-                            <p class="text-[11px] text-gray-400 truncate">
-                                {{ $vehicle->spec }}
-                                @if(!empty($vehicle->color))
-                                    &bull; {{ $vehicle->color }}
-                                @endif
-                                @if(!empty($vehicle->year))
-                                    ({{ $vehicle->year }})
-                                @endif
-                            </p>
+                            <p class="text-[11px] text-gray-400 mt-0.5 truncate">{{ $metaStr }}</p>
                         </div>
                     </div>
                 </td>
-
                 <td class="py-3.5 px-4" data-sort="{{ $catName }}">
-                    <span class="bg-brand-canvas text-gray-600 text-[11px] font-bold px-3 py-1 rounded-full">
-                        {{ $catName }}
-                    </span>
+                    <x-badge variant="neutral">{{ $catName }}</x-badge>
                 </td>
-
-                <td class="py-3.5 px-4 font-extrabold text-brand-ink" data-sort="{{ $vehicle->price_per_day }}">
+                <td class="py-3.5 px-4 font-extrabold text-brand-ink" data-sort="{{ $vehicle->price_per_day }}" data-format-rupiah="{{ $vehicle->price_per_day }}">
                     Rp {{ number_format($vehicle->price_per_day, 0, ',', '.') }}
                 </td>
-
-                <td class="py-3.5 px-4 font-bold" data-sort="{{ $vehicle->available_stock }}">
+                <td class="py-3.5 px-4 font-bold text-brand-ink whitespace-nowrap" data-sort="{{ $vehicle->available_stock }}">
                     {{ $vehicle->available_stock }} / {{ $vehicle->total_stock }} Unit
                 </td>
-
                 <td class="py-3.5 px-4" data-sort="{{ $vehicle->status }}">
                     @if($vehicle->status === 'tersedia')
-                        <span class="inline-flex items-center gap-1.5 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[11px] font-extrabold px-3 py-1 rounded-full">
-                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Tersedia
-                        </span>
+                        <x-badge variant="success" :dot="true">Tersedia</x-badge>
+                    @elseif($vehicle->status === 'maintenance')
+                        <x-badge variant="warning" :dot="true">Maintenance</x-badge>
                     @else
-                        <span class="inline-flex items-center gap-1.5 bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[11px] font-extrabold px-3 py-1 rounded-full">
-                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Maintenance
-                        </span>
+                        <x-badge variant="info" :dot="true">Disewa</x-badge>
                     @endif
                 </td>
-
-                <td class="py-3.5 px-4 text-right">
-                    <div class="inline-flex items-center justify-end gap-1.5">
+                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                    <div class="inline-flex items-center gap-1.5">
                         <button type="button"
-                            onclick='openEditVehicleModal(@json($vehicle), @json($images))'
-                            title="Edit Armada"
-                            class="w-8 h-8 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink inline-flex items-center justify-center transition cursor-pointer">
+                            onclick='openVehicleModal(@json($vehicle))'
+                            title="Edit Unit"
+                            class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-yellowSoft text-brand-ink flex items-center justify-center transition cursor-pointer">
                             <i class="bi bi-pencil-fill text-xs"></i>
                         </button>
 
-                        <form action="{{ route('admin.vehicles.destroy', $vehicle->id) }}" method="POST" onsubmit="return confirm('Hapus armada ini?')" class="inline">
+                        <form action="{{ route('admin.vehicles.destroy', $vehicle->id) }}" method="POST"
+                              onsubmit="return confirm('Hapus unit {{ addslashes($vehicle->name) }} ({{ $plate }})?')"
+                              class="inline">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink inline-flex items-center justify-center transition cursor-pointer" title="Hapus">
-                                <i class="bi bi-trash3-fill text-xs"></i>
+                            <button type="submit" title="Hapus Unit"
+                                class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
+                                <i class="bi bi-trash-fill text-xs"></i>
                             </button>
                         </form>
                     </div>
                 </td>
             </tr>
-        @empty
-            <tr>
-                <td colspan="7" class="py-12 text-center text-gray-400 text-xs">
-                    Belum ada data kendaraan yang ditambahkan.
-                </td>
-            </tr>
-        @endforelse
+        @endforeach
+        <tr id="fleet-empty-row" data-empty-row="true" class="hidden">
+            <td colspan="7" class="py-10 text-center text-xs text-gray-400">
+                Tidak ada unit armada yang sesuai dengan kata kunci atau filter.
+            </td>
+        </tr>
     </x-table>
 
-    <!-- MODAL KELOLA KATEGORI KENDARAAN (TAMBAH, EDIT INLINE, HAPUS) -->
-    <div id="manageCategoriesModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-[60] hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto shadow-2xl">
-            <div class="p-5 sm:p-6 flex justify-between items-center sticky top-0 bg-white z-10">
+    <!-- MODAL TAMBAH / EDIT ARMADA -->
+    <div id="vehicleFormModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
                 <div>
-                    <h2 class="text-lg font-extrabold text-brand-ink">Kelola Kategori</h2>
-                    <p class="text-[11px] text-gray-400">Tambah atau ubah tipe kendaraan yang tersedia</p>
+                    <h3 id="veh-modal-title" class="text-base font-extrabold text-brand-ink">Tambah Unit Armada</h3>
+                    <p class="text-[11px] text-gray-400">1 unit fisik mewakili 1 plat nomor unik</p>
                 </div>
-                <button type="button" onclick="closeCategoryModal()" class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
+                <button type="button" onclick="RentalinUI.closeModal('vehicleFormModal')"
+                    class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
                     <i class="bi bi-x-lg text-xs"></i>
                 </button>
             </div>
 
-            <div class="px-5 sm:px-6 pb-6 space-y-5">
-                <form action="{{ Route::has('admin.categories.store') ? route('admin.categories.store') : url('/admin/categories') }}" method="POST" class="flex items-center gap-2">
-                    @csrf
-                    <input type="text" name="name" required placeholder="Tipe baru (misal: SUV, Minibus, Sport...)"
-                        class="flex-1 rounded-2xl px-4 py-3 text-xs font-semibold">
-                    <button type="submit"
-                        class="px-4 py-3 rounded-2xl bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold whitespace-nowrap transition-all cursor-pointer">
-                        + Tambah
-                    </button>
-                </form>
-
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between px-1">
-                        <span class="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Daftar Tipe Kendaraan</span>
-                        <span class="text-[11px] font-bold text-gray-400">{{ count($categories) }} Kategori</span>
-                    </div>
-
-                    @forelse($categories as $cat)
-                        @php
-                            $unitCount = $cat->vehicles_count
-                                ?? $vehicleList->filter(fn($v) => ($v->category_id ?? ($v->category->id ?? null)) == $cat->id)->count();
-                        @endphp
-                        <div class="bg-brand-canvas rounded-2xl p-2.5 transition-all" id="cat-row-{{ $cat->id }}">
-                            <div class="cat-view-mode flex items-center justify-between gap-2 pl-2">
-                                <div class="min-w-0">
-                                    <p class="text-xs font-extrabold text-brand-ink truncate">{{ $cat->name }}</p>
-                                    <p class="text-[10px] text-gray-400">{{ $unitCount }} unit terdaftar</p>
-                                </div>
-
-                                <div class="flex items-center gap-1.5 flex-shrink-0">
-                                    <button type="button" onclick="toggleEditCategory({{ $cat->id }}, true)" title="Edit nama kategori"
-                                        class="w-8 h-8 rounded-xl bg-white hover:opacity-90 text-brand-ink flex items-center justify-center transition cursor-pointer">
-                                        <i class="bi bi-pencil-fill text-[11px]"></i>
-                                    </button>
-
-                                    <form action="{{ Route::has('admin.categories.destroy') ? route('admin.categories.destroy', $cat->id) : url('/admin/categories/' . $cat->id) }}"
-                                          method="POST" onsubmit="return confirm('Hapus kategori {{ addslashes($cat->name) }}?')" class="inline">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit" title="Hapus kategori"
-                                            class="w-8 h-8 rounded-xl bg-white hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
-                                            <i class="bi bi-trash3-fill text-[11px]"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-
-                            <form action="{{ Route::has('admin.categories.update') ? route('admin.categories.update', $cat->id) : url('/admin/categories/' . $cat->id) }}"
-                                  method="POST" class="cat-edit-mode hidden flex items-center gap-1.5">
-                                @csrf
-                                @method('PUT')
-                                <input type="text" name="name" value="{{ $cat->name }}" required
-                                    class="flex-1 !bg-white rounded-xl px-3 py-2 text-xs font-bold">
-                                <button type="submit" title="Simpan perubahan"
-                                    class="w-8 h-8 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition cursor-pointer">
-                                    <i class="bi bi-check-lg text-xs"></i>
-                                </button>
-                                <button type="button" onclick="toggleEditCategory({{ $cat->id }}, false)" title="Batal"
-                                    class="w-8 h-8 rounded-xl bg-white text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
-                                    <i class="bi bi-x-lg text-[11px]"></i>
-                                </button>
-                            </form>
-                        </div>
-                    @empty
-                        <div class="bg-brand-canvas rounded-2xl p-6 text-center text-xs text-gray-400">
-                            Belum ada kategori kendaraan. Tambahkan tipe pertama di atas.
-                        </div>
-                    @endforelse
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL TAMBAH ARMADA -->
-    <div id="addVehicleModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div class="p-5 sm:p-6 flex justify-between items-center sticky top-0 bg-white z-10">
-                <div>
-                    <h2 class="text-lg font-extrabold text-brand-ink">Tambah Armada Baru</h2>
-                    <p class="text-[11px] text-gray-400">Isi info umum kendaraan sekali, lalu masukkan daftar plat nomor tiap unit</p>
-                </div>
-                <button type="button" onclick="closeAddVehicleModal()" class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
-                    <i class="bi bi-x-lg text-xs"></i>
-                </button>
-            </div>
-
-            <form action="{{ route('admin.vehicles.store') }}" method="POST" enctype="multipart/form-data" class="px-5 sm:px-6 pb-6 space-y-5">
+            <form action="{{ route('admin.vehicles.store') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
                 @csrf
+                <input type="hidden" name="vehicle_id" id="veh-id">
 
-                <!-- BAGIAN 1: INFORMASI UMUM KENDARAAN (1X INPUT) -->
-                <div class="space-y-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
                         <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Nama Kendaraan</label>
-                        <input type="text" name="name" required placeholder="Contoh: Toyota Avanza Veloz"
-                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+                        <input type="text" name="name" id="veh-name" required placeholder="Contoh: Toyota Avanza Veloz"
+                               class="w-full rounded-2xl px-4 py-2.5 text-xs font-semibold">
                     </div>
-
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <div class="flex items-center justify-between mb-1.5">
-                                <label class="block text-xs font-extrabold text-brand-ink">Kategori</label>
-                                <button type="button" onclick="openCategoryModal()"
-                                    class="text-[11px] font-extrabold text-brand-pink hover:underline cursor-pointer">
-                                    + Edit / Tambah Tipe
-                                </button>
-                            </div>
-                            <x-select
-                                name="category_id"
-                                placeholder="Pilih kategori"
-                                :options="$categoryOptions"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Tarif per Hari (Rp)</label>
-                            <input type="number" name="price_per_day" required min="10000" placeholder="350000"
-                                class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
-                        </div>
-                    </div>
-
                     <div>
-                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Spesifikasi Singkat</label>
-                        <input type="text" name="spec" required placeholder="Contoh: Automatic • 7 Kursi • Bensin"
-                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Plat Nomor</label>
+                        <input type="text" name="license_plate" id="veh-plate" required placeholder="Contoh: L 1428 AB"
+                               class="w-full rounded-2xl px-4 py-2.5 text-xs font-mono font-extrabold uppercase">
                     </div>
+                </div>
 
-                    <x-file-upload
-                        name="images[]"
-                        label="Galeri Foto Kendaraan"
-                        accept="image/*"
-                        :multiple="true"
-                        hint="Bisa pilih lebih dari 1 foto (tampak depan, samping, interior) — otomatis dipakai semua unit di bawah"
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <x-select
+                        name="category_id"
+                        id="veh-category"
+                        label="Kategori"
+                        :options="$formCategoryOptions"
+                    />
+                    <div>
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Tarif Sewa / Hari (Rp)</label>
+                        <input type="number" name="price_per_day" id="veh-price" required placeholder="350000"
+                               class="w-full rounded-2xl px-4 py-2.5 text-xs font-bold">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Warna &amp; Tahun</label>
+                        <input type="text" name="color_year" id="veh-color" placeholder="Putih Mutiara (2023)"
+                               class="w-full rounded-2xl px-4 py-2.5 text-xs font-semibold">
+                    </div>
+                    <x-select
+                        name="status"
+                        id="veh-status"
+                        label="Status Unit"
+                        :options="[
+                            'tersedia' => 'Tersedia',
+                            'disewa' => 'Sedang Disewa',
+                            'maintenance' => 'Maintenance',
+                        ]"
+                        selected="tersedia"
                     />
                 </div>
 
-                <!-- BAGIAN 2: DAFTAR UNIT FISIK & PLAT NOMOR -->
-                <div class="bg-brand-canvas rounded-3xl p-4 space-y-3">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <h3 class="text-xs font-extrabold text-brand-ink">Daftar Unit Fisik & Plat Nomor</h3>
-                            <p class="text-[11px] text-gray-500">Atur jumlah baris sesuai banyaknya unit fisik yang masuk</p>
-                        </div>
-
-                        <div class="flex items-center gap-1.5">
-                            <input type="number" id="add-batch-unit-count" value="1" min="1" max="30"
-                                class="w-12 !bg-white rounded-xl px-2 py-1.5 text-xs font-extrabold text-center">
-                            <button type="button" onclick="applyBatchUnitCount('add')"
-                                class="bg-white hover:opacity-90 text-brand-ink text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
-                                Set
-                            </button>
-                            <button type="button" onclick="addUnitRow('add')"
-                                class="bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
-                                + Unit
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="hidden sm:grid sm:grid-cols-[28px_1.35fr_0.95fr_0.8fr_1.35fr_32px] gap-2 px-3 text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                        <div class="text-center">#</div>
-                        <div>Plat Nomor</div>
-                        <div>Warna</div>
-                        <div>Tahun</div>
-                        <div>Status</div>
-                        <div></div>
-                    </div>
-
-                    <div id="add-unit-rows-container" class="space-y-2"></div>
+                <div>
+                    <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Spesifikasi Singkat</label>
+                    <input type="text" name="spec" id="veh-spec" required placeholder="Automatic • 7 Kursi • Bensin"
+                           class="w-full rounded-2xl px-4 py-2.5 text-xs font-semibold">
                 </div>
 
-                <div class="pt-1">
+                <div class="flex items-center gap-2.5 pt-2">
+                    <button type="button" onclick="RentalinUI.closeModal('vehicleFormModal')"
+                        class="flex-1 py-3 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition cursor-pointer">
+                        Batal
+                    </button>
                     <button type="submit"
-                        class="w-full py-3.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer">
-                        Simpan Armada (<span id="add-submit-unit-label">1</span> Unit)
+                        class="flex-[2] py-3 rounded-full bg-brand-pink hover:bg-brand-pinkHover text-white text-xs font-extrabold transition cursor-pointer">
+                        Simpan Unit Armada
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- MODAL EDIT ARMADA (IDENTIK DENGAN MODAL TAMBAH ARMADA) -->
-    <div id="editVehicleModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div class="p-5 sm:p-6 flex justify-between items-center sticky top-0 bg-white z-10">
-                <div>
-                    <h2 class="text-lg font-extrabold text-brand-ink">Edit Armada</h2>
-                    <p class="text-[11px] text-gray-400">Perbarui info umum kendaraan dan daftar plat nomor tiap unit</p>
-                </div>
-                <button type="button" onclick="closeEditVehicleModal()" class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
+    <!-- MODAL KELOLA KATEGORI -->
+    <div id="categoryModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-base font-extrabold text-brand-ink">Kategori Armada</h3>
+                <button type="button" onclick="RentalinUI.closeModal('categoryModal')"
+                    class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
                     <i class="bi bi-x-lg text-xs"></i>
                 </button>
             </div>
 
-            <form id="editVehicleForm" action="" method="POST" enctype="multipart/form-data" class="px-5 sm:px-6 pb-6 space-y-5">
-                @csrf
-                @method('PUT')
-
-                <!-- BAGIAN 1: INFORMASI UMUM KENDARAAN (1X INPUT) -->
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Nama Kendaraan</label>
-                        <input type="text" name="name" id="edit-v-name" required placeholder="Contoh: Toyota Avanza Veloz"
-                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+            <div class="space-y-2 mb-4">
+                @foreach($categories as $cat)
+                    <div class="flex items-center justify-between bg-brand-canvas rounded-2xl px-4 py-2.5 text-xs">
+                        <span class="font-bold text-brand-ink">{{ $cat->name }}</span>
+                        <span class="font-mono text-[11px] text-gray-400">{{ $cat->slug }}</span>
                     </div>
+                @endforeach
+            </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <div class="flex items-center justify-between mb-1.5">
-                                <label class="block text-xs font-extrabold text-brand-ink">Kategori</label>
-                                <button type="button" onclick="openCategoryModal()"
-                                    class="text-[11px] font-extrabold text-brand-pink hover:underline cursor-pointer">
-                                    + Edit / Tambah Tipe
-                                </button>
-                            </div>
-                            <x-select
-                                name="category_id"
-                                id="edit-v-category"
-                                placeholder="Pilih kategori"
-                                :options="$categoryOptions"
-                            />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Tarif per Hari (Rp)</label>
-                            <input type="number" name="price_per_day" id="edit-v-price" required min="10000" placeholder="350000"
-                                class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Spesifikasi Singkat</label>
-                        <input type="text" name="spec" id="edit-v-spec" required placeholder="Contoh: Automatic • 7 Kursi • Bensin"
-                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
-                    </div>
-
-                    <!-- Preview Foto Saat Ini -->
-                    <div id="edit-v-current-images-wrap" class="hidden">
-                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Foto Saat Ini</label>
-                        <div id="edit-v-current-images" class="flex items-center gap-2 overflow-x-auto pb-1"></div>
-                    </div>
-
-                    <x-file-upload
-                        name="images[]"
-                        label="Galeri Foto Kendaraan"
-                        accept="image/*"
-                        :multiple="true"
-                        hint="Kosongkan jika tidak ingin mengubah foto saat ini — atau pilih foto baru untuk mengganti"
-                    />
-                </div>
-
-                <!-- BAGIAN 2: DAFTAR UNIT FISIK & PLAT NOMOR -->
-                <div class="bg-brand-canvas rounded-3xl p-4 space-y-3">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <h3 class="text-xs font-extrabold text-brand-ink">Daftar Unit Fisik & Plat Nomor</h3>
-                            <p class="text-[11px] text-gray-500">Atur jumlah baris sesuai banyaknya unit fisik yang dimiliki</p>
-                        </div>
-
-                        <div class="flex items-center gap-1.5">
-                            <input type="number" id="edit-batch-unit-count" value="1" min="1" max="30"
-                                class="w-12 !bg-white rounded-xl px-2 py-1.5 text-xs font-extrabold text-center">
-                            <button type="button" onclick="applyBatchUnitCount('edit')"
-                                class="bg-white hover:opacity-90 text-brand-ink text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
-                                Set
-                            </button>
-                            <button type="button" onclick="addUnitRow('edit')"
-                                class="bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
-                                + Unit
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="hidden sm:grid sm:grid-cols-[28px_1.35fr_0.95fr_0.8fr_1.35fr_32px] gap-2 px-3 text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
-                        <div class="text-center">#</div>
-                        <div>Plat Nomor</div>
-                        <div>Warna</div>
-                        <div>Tahun</div>
-                        <div>Status</div>
-                        <div></div>
-                    </div>
-
-                    <div id="edit-unit-rows-container" class="space-y-2"></div>
-                </div>
-
-                <div class="pt-1">
-                    <button type="submit"
-                        class="w-full py-3.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer">
-                        Simpan Perubahan (<span id="edit-submit-unit-label">1</span> Unit)
-                    </button>
-                </div>
-            </form>
+            <button type="button" onclick="RentalinUI.closeModal('categoryModal')"
+                class="w-full py-2.5 rounded-full bg-brand-pink text-white text-xs font-extrabold transition cursor-pointer">
+                Tutup
+            </button>
         </div>
     </div>
 
     <script>
-        const updateVehicleRouteTemplate = @json(Route::has('admin.vehicles.update') ? route('admin.vehicles.update', '__ID__') : url('/admin/vehicles/__ID__'));
+        function filterFleetTable() {
+            const catVal = document.getElementById('fleet-filter-category')?.value || 'all';
+            const statusVal = document.getElementById('fleet-filter-status')?.value || 'all';
 
-        function openCategoryModal() {
-            const modal = document.getElementById('manageCategoriesModal');
-            if (modal) modal.classList.remove('hidden');
+            RentalinUI.filterItems({
+                inputId: 'fleet-search-input',
+                clearBtnId: 'fleet-search-input-clear',
+                itemSelector: '#vehicles-table tbody tr.vehicle-row',
+                countId: 'fleet-visible-count',
+                emptyId: 'fleet-empty-row',
+                extraPredicate: (row) => {
+                    const matchCat = catVal === 'all' || row.dataset.category === catVal;
+                    const matchStatus = statusVal === 'all' || row.dataset.status === statusVal;
+                    return matchCat && matchStatus;
+                },
+            });
         }
 
-        function closeCategoryModal() {
-            const modal = document.getElementById('manageCategoriesModal');
-            if (modal) modal.classList.add('hidden');
+        function openVehicleModal(vehicle = null) {
+            document.getElementById('veh-modal-title').innerText = vehicle ? 'Edit Unit Armada' : 'Tambah Unit Armada';
+            document.getElementById('veh-id').value = vehicle?.id || '';
+            document.getElementById('veh-name').value = vehicle?.name || '';
+            document.getElementById('veh-plate').value = vehicle?.license_plate || '';
+            document.getElementById('veh-price').value = vehicle?.price_per_day || '';
+            document.getElementById('veh-color').value = vehicle?.color ? `${vehicle.color}${vehicle.year ? ' (' + vehicle.year + ')' : ''}` : '';
+            document.getElementById('veh-spec').value = vehicle?.spec || '';
+
+            if (vehicle?.category?.id) {
+                RentalinUI.setSelectValue('veh-category', String(vehicle.category.id));
+            }
+            RentalinUI.setSelectValue('veh-status', vehicle?.status || 'tersedia');
+            RentalinUI.openModal('vehicleFormModal');
         }
-
-        function toggleEditCategory(id, isEditing) {
-            const row = document.getElementById(`cat-row-${id}`);
-            if (!row) return;
-            const viewMode = row.querySelector('.cat-view-mode');
-            const editMode = row.querySelector('.cat-edit-mode');
-
-            if (isEditing) {
-                viewMode.classList.add('hidden');
-                editMode.classList.remove('hidden');
-                const input = editMode.querySelector('input[name="name"]');
-                if (input) {
-                    input.focus();
-                    input.select();
-                }
-            } else {
-                editMode.classList.add('hidden');
-                viewMode.classList.remove('hidden');
-            }
-        }
-
-        (function initVehicleUnitBatchers() {
-            let rowCounter = 0;
-
-            function escapeAttr(val) {
-                return String(val ?? '')
-                    .replace(/&/g, '&amp;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
-            }
-
-            function createUnitRowHTML(prefix, idx, num, data = {}) {
-                const statusInputId = `${prefix}-unit-status-${idx}`;
-                const statusVal = data.status === 'maintenance' ? 'maintenance' : 'tersedia';
-                const statusLabel = statusVal === 'maintenance' ? 'Maintenance' : 'Tersedia';
-                const plateVal = escapeAttr(data.license_plate || '');
-                const colorVal = escapeAttr(data.color || '');
-                const yearVal = escapeAttr(data.year || '');
-                const hiddenIdField = prefix === 'edit'
-                    ? `<input type="hidden" name="units[${idx}][id]" value="${escapeAttr(data.id || '')}">`
-                    : '';
-
-                const activeOptClass = 'text-brand-pink bg-brand-pinkSoft/40 font-bold';
-                const inactiveOptClass = 'text-brand-ink font-semibold hover:bg-brand-canvas';
-
-                return `
-                    <div class="unit-row bg-white rounded-2xl p-2.5 grid grid-cols-12 sm:grid-cols-[28px_1.35fr_0.95fr_0.8fr_1.35fr_32px] gap-2 items-center transition-all">
-                        ${hiddenIdField}
-                        <div class="col-span-2 sm:col-span-1 text-[11px] font-extrabold text-gray-400 text-center row-num">
-                            ${num}
-                        </div>
-                        <div class="col-span-10 sm:col-span-1">
-                            <input type="text" name="units[${idx}][license_plate]" value="${plateVal}" required
-                                placeholder="L 1234 AB"
-                                class="w-full rounded-xl px-2.5 py-2 font-mono text-xs font-bold uppercase">
-                        </div>
-                        <div class="col-span-4 sm:col-span-1">
-                            <input type="text" name="units[${idx}][color]" value="${colorVal}"
-                                placeholder="Warna"
-                                class="w-full rounded-xl px-2.5 py-2 text-xs font-semibold">
-                        </div>
-                        <div class="col-span-3 sm:col-span-1">
-                            <input type="text" name="units[${idx}][year]" value="${yearVal}" maxlength="4" inputmode="numeric"
-                                placeholder="Tahun"
-                                class="w-full rounded-xl px-2.5 py-2 text-xs font-semibold text-center">
-                        </div>
-                        <div class="col-span-4 sm:col-span-1">
-                            <div class="custom-select-group relative" data-target="${statusInputId}">
-                                <input type="hidden" name="units[${idx}][status]" id="${statusInputId}" value="${statusVal}">
-                                <button type="button" onclick="RentalinUI.toggleDropdown(event, this)"
-                                    class="custom-select-trigger w-full bg-brand-canvas rounded-xl px-2.5 py-2 text-xs font-bold text-brand-ink flex items-center justify-between gap-1.5 transition cursor-pointer">
-                                    <span class="custom-select-label truncate">${statusLabel}</span>
-                                    <i class="bi bi-chevron-down text-[10px] text-gray-400 transition-transform duration-200 flex-shrink-0"></i>
-                                </button>
-                                <div class="custom-select-menu hidden absolute right-0 mt-1.5 w-36 bg-white rounded-2xl shadow-xl p-1.5 z-40">
-                                    <button type="button" data-value="tersedia" data-label="Tersedia"
-                                        onclick="RentalinUI.selectOption(this, 'tersedia', 'Tersedia')"
-                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs ${statusVal === 'tersedia' ? activeOptClass : inactiveOptClass} flex items-center justify-between transition cursor-pointer">
-                                        <span>Tersedia</span>
-                                        <i class="bi bi-check2 text-xs ${statusVal === 'tersedia' ? '' : 'hidden'}"></i>
-                                    </button>
-                                    <button type="button" data-value="maintenance" data-label="Maintenance"
-                                        onclick="RentalinUI.selectOption(this, 'maintenance', 'Maintenance')"
-                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs ${statusVal === 'maintenance' ? activeOptClass : inactiveOptClass} flex items-center justify-between transition cursor-pointer">
-                                        <span>Maintenance</span>
-                                        <i class="bi bi-check2 text-xs ${statusVal === 'maintenance' ? '' : 'hidden'}"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-span-1 flex justify-center">
-                            <button type="button" onclick="removeUnitRow(this, '${prefix}')" title="Hapus baris"
-                                class="btn-del-row w-7 h-7 rounded-full hover:bg-brand-pinkSoft text-gray-400 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
-                                <i class="bi bi-x-lg text-[11px]"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }
-
-            function syncRowIndexes(prefix) {
-                const container = document.getElementById(`${prefix}-unit-rows-container`);
-                const countInput = document.getElementById(`${prefix}-batch-unit-count`);
-                const submitLabel = document.getElementById(`${prefix}-submit-unit-label`);
-                if (!container) return;
-
-                const rows = container.querySelectorAll('.unit-row');
-                rows.forEach((row, i) => {
-                    row.querySelector('.row-num').innerText = i + 1;
-                    const delBtn = row.querySelector('.btn-del-row');
-                    if (delBtn) delBtn.classList.toggle('invisible', rows.length === 1);
-                });
-                if (countInput) countInput.value = rows.length;
-                if (submitLabel) submitLabel.innerText = rows.length;
-            }
-
-            window.addUnitRow = function(prefix = 'add', data = {}) {
-                const container = document.getElementById(`${prefix}-unit-rows-container`);
-                if (!container) return;
-                const current = container.querySelectorAll('.unit-row').length;
-                container.insertAdjacentHTML('beforeend', createUnitRowHTML(prefix, rowCounter++, current + 1, data));
-                syncRowIndexes(prefix);
-            };
-
-            window.removeUnitRow = function(btn, prefix = 'add') {
-                const container = document.getElementById(`${prefix}-unit-rows-container`);
-                if (!container || container.querySelectorAll('.unit-row').length <= 1) return;
-                btn.closest('.unit-row').remove();
-                syncRowIndexes(prefix);
-            };
-
-            window.applyBatchUnitCount = function(prefix = 'add') {
-                const container = document.getElementById(`${prefix}-unit-rows-container`);
-                const countInput = document.getElementById(`${prefix}-batch-unit-count`);
-                if (!container || !countInput) return;
-
-                const target = Math.min(Math.max(parseInt(countInput.value || 1, 10), 1), 30);
-                const currentRows = container.querySelectorAll('.unit-row');
-
-                if (target > currentRows.length) {
-                    for (let i = currentRows.length; i < target; i++) {
-                        container.insertAdjacentHTML('beforeend', createUnitRowHTML(prefix, rowCounter++, i + 1));
-                    }
-                } else if (target < currentRows.length) {
-                    for (let i = currentRows.length - 1; i >= target; i--) {
-                        currentRows[i].remove();
-                    }
-                }
-                syncRowIndexes(prefix);
-            };
-
-            window.openAddVehicleModal = function() {
-                const modal = document.getElementById('addVehicleModal');
-                const container = document.getElementById('add-unit-rows-container');
-                if (modal) modal.classList.remove('hidden');
-                if (container && container.children.length === 0) {
-                    window.addUnitRow('add');
-                }
-            };
-
-            window.closeAddVehicleModal = function() {
-                const modal = document.getElementById('addVehicleModal');
-                if (modal) modal.classList.add('hidden');
-            };
-
-            window.openEditVehicleModal = function(vehicle, resolvedImages = []) {
-                const modal = document.getElementById('editVehicleModal');
-                const form = document.getElementById('editVehicleForm');
-                const container = document.getElementById('edit-unit-rows-container');
-                if (!modal || !form || !vehicle || !container) return;
-
-                form.action = updateVehicleRouteTemplate.replace('__ID__', vehicle.id);
-
-                document.getElementById('edit-v-name').value = vehicle.name || '';
-                document.getElementById('edit-v-price').value = vehicle.price_per_day || '';
-                document.getElementById('edit-v-spec').value = vehicle.spec || '';
-
-                const catId = vehicle.category_id ?? (vehicle.category ? vehicle.category.id : '');
-                if (catId !== '' && catId !== null && window.RentalinUI) {
-                    RentalinUI.setSelectValue('edit-v-category', String(catId));
-                }
-
-                const imgWrap = document.getElementById('edit-v-current-images-wrap');
-                const imgList = document.getElementById('edit-v-current-images');
-                if (imgWrap && imgList) {
-                    imgList.innerHTML = '';
-                    if (Array.isArray(resolvedImages) && resolvedImages.length > 0) {
-                        resolvedImages.forEach(src => {
-                            imgList.insertAdjacentHTML('beforeend', `<img src="${src}" class="w-16 h-12 rounded-xl object-cover bg-brand-canvas flex-shrink-0">`);
-                        });
-                        imgWrap.classList.remove('hidden');
-                    } else {
-                        imgWrap.classList.add('hidden');
-                    }
-                }
-
-                container.innerHTML = '';
-                const units = Array.isArray(vehicle.units) && vehicle.units.length > 0
-                    ? vehicle.units
-                    : [{
-                        id: vehicle.id,
-                        license_plate: vehicle.license_plate || '',
-                        color: vehicle.color || '',
-                        year: vehicle.year || '',
-                        status: vehicle.status || 'tersedia',
-                    }];
-
-                units.forEach(u => window.addUnitRow('edit', u));
-
-                modal.classList.remove('hidden');
-            };
-
-            window.closeEditVehicleModal = function() {
-                const modal = document.getElementById('editVehicleModal');
-                if (modal) modal.classList.add('hidden');
-            };
-
-            const addContainer = document.getElementById('add-unit-rows-container');
-            if (addContainer && addContainer.children.length === 0) {
-                window.addUnitRow('add');
-            }
-        })();
     </script>
 @endsection

@@ -211,67 +211,33 @@ Route::post('/logout', function (Request $request) {
 |--------------------------------------------------------------------------
 */
 Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $makeDummyRental) {
-    // Ringkasan Dashboard Utama Admin (Statistik + Ringkasan Armada + Upload QRIS Toko)
+    // Ringkasan Dashboard Utama Admin
     Route::get('/dashboard', function () use ($getFleetData) {
         [$categories, $vehicles] = $getFleetData();
 
-        $rentals = collect([
-            (object) [
-                'id' => 1,
-                'booking_code' => 'RNTL-DEMO01',
-                'customer_name' => 'Budi Santoso',
-                'customer_phone' => '081234567890',
-                'vehicle' => $vehicles[0], // Avanza L 1428 AB
-                'pickup_date' => now(),
-                'return_date' => now()->addDays(2),
-                'duration_days' => 2,
-                'total_price' => 700000,
-                'payment_status' => 'pending',
-                'status' => 'menunggu_konfirmasi',
-            ],
-            (object) [
-                'id' => 2,
-                'booking_code' => 'RNTL-DEMO02',
-                'customer_name' => 'Siti Aminah',
-                'customer_phone' => '085711223344',
-                'vehicle' => $vehicles[3], // Yamaha NMAX L 4512 KL
-                'pickup_date' => now()->addDay(),
-                'return_date' => now()->addDays(4),
-                'duration_days' => 3,
-                'total_price' => 360000,
-                'payment_status' => 'pending',
-                'status' => 'menunggu_pembayaran',
-            ],
-        ]);
+        $stats = [
+            'revenue'   => 700000,
+            'rented'    => 1,
+            'pending'   => 1,
+            'available' => $vehicles->where('status', 'tersedia')->count(),
+        ];
 
-        $totalRevenue = $rentals->where('payment_status', 'paid')->sum('total_price');
-        $activeRentals = $rentals->where('status', 'aktif')->count();
-        $pendingRentals = $rentals->whereIn('status', ['menunggu', 'menunggu_pembayaran', 'menunggu_konfirmasi'])->count();
-        $availableVehicles = $vehicles->where('status', 'tersedia')->count();
-
-        return view('admin.dashboard', compact(
-            'rentals',
-            'vehicles',
-            'categories',
-            'totalRevenue',
-            'activeRentals',
-            'pendingRentals',
-            'availableVehicles'
-        ));
+        return view('admin.dashboard', compact('vehicles', 'categories', 'stats'));
     })->name('dashboard');
 
     // Halaman Khusus Transaksi & Scan QR
     Route::get('/transactions', function () use ($getFleetData) {
         [$categories, $vehicles] = $getFleetData();
+        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.transaction';
 
-        return view('admin.transactions', compact('categories', 'vehicles'));
+        return view($viewName, compact('categories', 'vehicles'));
     })->name('transactions');
 
-    // Halaman Scan QR / Verifikasi Nota (Arahkan ke halaman transaksi & scan QR)
+    // Alias Scan QR -> mengarah ke view transaksi yang sama
     Route::get('/scan', function () use ($getFleetData) {
         [$categories, $vehicles] = $getFleetData();
+        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.transaction';
 
-        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.scan';
         return view($viewName, compact('categories', 'vehicles'));
     })->name('scan');
 

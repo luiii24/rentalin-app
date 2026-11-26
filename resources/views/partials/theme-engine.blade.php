@@ -1,231 +1,143 @@
-<script>
-    (function() {
-        const savedTheme = localStorage.getItem('rentalin_theme');
-        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    })();
-
-    function toggleThemeMode() {
-        const isDark = document.documentElement.classList.toggle('dark');
-        localStorage.setItem('rentalin_theme', isDark ? 'dark' : 'light');
-    }
-</script>
-<script src="https://cdn.tailwindcss.com"></script>
+<!-- Fonts & Icons Global -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<!-- Tailwind CSS Engine (Single Instance) -->
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
     tailwind.config = {
         darkMode: 'class',
         theme: {
             extend: {
-                fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                fontFamily: {
+                    sans: ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+                },
                 colors: {
                     brand: {
-                        pink: '#FF6B8B',
-                        pinkHover: '#F25577',
+                        pink: '#FF385C',
+                        pinkHover: '#E02749',
+                        pinkSoft: '#FFF0F3',
                         yellow: '#F3C64F',
-                        yellowSoft: '#FDF5DF',
-                        pinkSoft: '#FFE8ED',
-                        canvas: '#E5E7EF',
+                        yellowSoft: '#FEF9E7',
+                        canvas: '#F4F5F7',
                         ink: '#1E1E1E',
-                        darkBg: '#111216',
-                        darkCard: '#1D1F27',
-                        darkItem: '#2A2E3B',
                     }
                 }
             }
         }
-    }
+    };
+
+    // Fungsi global toggle tema (tersedia di halaman publik maupun admin)
+    window.toggleThemeMode = function () {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('rentalin_theme', isDark ? 'dark' : 'light');
+    };
+    window.toggleTheme = window.toggleThemeMode;
 </script>
+
 <style>
-    /* =====================================================================
-       1. HAPUS SEMUA BORDER STRUKTURAL (TETAP PERTAHANKAN SPINNER & AKTIF)
-       ===================================================================== */
-    *:not(.animate-spin):not(.keep-border),
-    .divide-y > :not([hidden]) ~ :not([hidden]),
-    .divide-x > :not([hidden]) ~ :not([hidden]) {
-        border-color: transparent !important;
-    }
-    .border-brand-pink {
-        border-color: #FF6B8B !important;
-    }
-
-    /* =====================================================================
-       2. MODE SIANG (LIGHT MODE) - HIERARKI ABU-ABU TANPA BORDER
-       ===================================================================== */
-    body {
-        background-color: #EFF1F5 !important;
+    /* =========================================================================
+       GLOBAL INPUT & FORM STANDARDIZATION
+       ========================================================================= */
+    input[type="text"]:not(.pill-search-input),
+    input[type="email"]:not(.pill-search-input),
+    input[type="password"]:not(.pill-search-input),
+    input[type="number"]:not(.pill-search-input),
+    input[type="tel"]:not(.pill-search-input),
+    input[type="url"]:not(.pill-search-input),
+    textarea:not(.pill-search-input),
+    select:not(.pill-search-input) {
+        background-color: #F4F5F7;
+        border: 1.5px solid #E5E7EB;
         color: #1E1E1E;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
     }
-    .bg-white {
-        background-color: #FFFFFF !important;
-        box-shadow: 0 2px 12px -2px rgba(15, 23, 42, 0.045);
+
+    input[type="text"]:not(.pill-search-input):focus,
+    input[type="email"]:not(.pill-search-input):focus,
+    input[type="password"]:not(.pill-search-input):focus,
+    input[type="number"]:not(.pill-search-input):focus,
+    input[type="tel"]:not(.pill-search-input):focus,
+    input[type="url"]:not(.pill-search-input):focus,
+    textarea:not(.pill-search-input):focus,
+    select:not(.pill-search-input):focus {
+        background-color: #FFFFFF;
+        border-color: #FF385C;
+        outline: none;
+        box-shadow: 0 0 0 4px rgba(255, 56, 92, 0.14);
     }
-    .bg-white\/90,
-    .bg-white\/95 {
-        background-color: rgba(255, 255, 255, 0.92) !important;
-    }
-    .bg-brand-canvas,
-    .bg-gray-50,
-    .bg-slate-50 {
-        background-color: #E5E7EF !important;
-    }
-    .bg-gray-100,
-    .bg-slate-100 {
-        background-color: #DCE0EA !important;
-    }
-    .hover\:bg-gray-50:hover,
-    .hover\:bg-gray-100:hover,
-    .hover\:bg-brand-canvas:hover,
-    tbody tr:hover {
-        background-color: #DCE0EA !important;
-    }
-    input[type="text"],
-    input[type="number"],
-    input[type="tel"],
-    input[type="email"],
-    input[type="password"],
-    input[type="date"],
-    input[type="search"],
-    select,
-    textarea {
-        background-color: #E5E7EF !important;
-        color: #1E1E1E !important;
-        transition: background-color 0.2s ease, box-shadow 0.2s ease;
-    }
-    input:focus,
-    select:focus,
-    textarea:focus {
+
+    /* Reset total untuk input di dalam Single Pill Search Bar */
+    input.pill-search-input,
+    input.pill-search-input:focus,
+    input.pill-search-input:hover,
+    .rounded-full > input[type="text"],
+    .rounded-full > input[type="text"]:focus,
+    .rounded-full > input[type="search"],
+    .rounded-full > input[type="search"]:focus,
+    html.dark input.pill-search-input,
+    html.dark input.pill-search-input:focus,
+    html.dark .rounded-full > input[type="text"],
+    html.dark .rounded-full > input[type="text"]:focus {
+        background: transparent !important;
+        background-color: transparent !important;
+        border: 0 !important;
         outline: none !important;
-        box-shadow: 0 0 0 3px rgba(255, 107, 139, 0.22) !important;
-    }
-
-    /* =====================================================================
-       3. MODE MALAM (DARK MODE) - HIERARKI ABU-ABU SLATE TANPA BORDER
-       ===================================================================== */
-    html.dark body {
-        background-color: #111216 !important;
-        color: #F3F4F6 !important;
-    }
-
-    /* Lapisan 1: Kartu Utama, Navbar, Sidebar, Modal */
-    html.dark .bg-white {
-        background-color: #1D1F27 !important;
-        box-shadow: 0 4px 18px -2px rgba(0, 0, 0, 0.38) !important;
-    }
-    html.dark .bg-white\/90,
-    html.dark .bg-white\/95 {
-        background-color: rgba(29, 31, 39, 0.92) !important;
-    }
-
-    /* Lapisan 2: Item di Dalam Kartu, Input, Header Tabel, Sub-panel */
-    html.dark .bg-brand-canvas,
-    html.dark .bg-gray-50,
-    html.dark .bg-slate-50,
-    html.dark thead,
-    html.dark thead tr {
-        background-color: #2A2E3B !important;
-    }
-    html.dark .bg-gray-100,
-    html.dark .bg-slate-100,
-    html.dark .bg-gray-200 {
-        background-color: #323746 !important;
-    }
-
-    /* Elemen putih bersarang di dalam item abu-abu (contoh: ikon bulat search bar) */
-    html.dark .bg-brand-canvas .bg-white,
-    html.dark .bg-gray-100 .bg-white,
-    html.dark .bg-gray-50 .bg-white {
-        background-color: #363B4B !important;
         box-shadow: none !important;
+        -webkit-appearance: none;
     }
 
-    /* Lapisan 3: Efek Hover & Baris Aktif */
-    html.dark .hover\:bg-gray-50:hover,
-    html.dark .hover\:bg-gray-100:hover,
-    html.dark .hover\:bg-brand-canvas:hover,
-    html.dark .hover\:bg-white:hover,
-    html.dark tbody tr:hover {
-        background-color: #353A4A !important;
+    /* =========================================================================
+       GLOBAL DARK MODE TOKENS
+       ========================================================================= */
+    html.dark body { background-color: #121316; color: #F3F4F6; }
+    html.dark .bg-white { background-color: #1B1D22 !important; }
+    html.dark .bg-white\/95 { background-color: rgba(27, 29, 34, 0.95) !important; }
+    html.dark .bg-white\/90 { background-color: rgba(27, 29, 34, 0.9) !important; }
+    html.dark .bg-white\/80 { background-color: rgba(27, 29, 34, 0.8) !important; }
+    html.dark .bg-brand-canvas { background-color: #16181D !important; }
+    html.dark .bg-brand-canvas\/50,
+    html.dark .bg-brand-canvas\/40,
+    html.dark .bg-brand-canvas\/70 { background-color: rgba(22, 24, 29, 0.7) !important; }
+    html.dark .bg-brand-yellowSoft { background-color: rgba(243, 198, 79, 0.14) !important; }
+    html.dark .bg-brand-pinkSoft { background-color: rgba(255, 56, 92, 0.15) !important; }
+    html.dark .text-brand-ink { color: #F9FAFB !important; }
+    html.dark .text-gray-600 { color: #D1D5DB !important; }
+    html.dark .text-gray-500 { color: #9CA3AF !important; }
+    html.dark .border-gray-200,
+    html.dark .border-gray-200\/80 { border-color: #2A2D35 !important; }
+    html.dark .border-gray-100,
+    html.dark .border-gray-100\/80,
+    html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #242730 !important; }
+
+    html.dark input[type="text"]:not(.pill-search-input),
+    html.dark input[type="email"]:not(.pill-search-input),
+    html.dark input[type="password"]:not(.pill-search-input),
+    html.dark input[type="number"]:not(.pill-search-input),
+    html.dark input[type="tel"]:not(.pill-search-input),
+    html.dark textarea:not(.pill-search-input),
+    html.dark select:not(.pill-search-input) {
+        background-color: #121316 !important;
+        color: #F9FAFB !important;
+        border-color: #2A2D35 !important;
     }
 
-    /* Form Input, Select, Textarea di Mode Malam */
-    html.dark input[type="text"],
-    html.dark input[type="number"],
-    html.dark input[type="tel"],
-    html.dark input[type="email"],
-    html.dark input[type="password"],
-    html.dark input[type="date"],
-    html.dark input[type="search"],
-    html.dark select,
-    html.dark textarea {
-        background-color: #2A2E3B !important;
-        color: #F8FAFC !important;
-    }
-    html.dark input::placeholder,
-    html.dark textarea::placeholder {
-        color: #94A3B8 !important;
+    html.dark input[type="text"]:not(.pill-search-input):focus,
+    html.dark input[type="number"]:not(.pill-search-input):focus,
+    html.dark input[type="tel"]:not(.pill-search-input):focus,
+    html.dark textarea:not(.pill-search-input):focus {
+        border-color: #FF385C !important;
+        box-shadow: 0 0 0 4px rgba(255, 56, 92, 0.18) !important;
     }
 
-    /* Hierarki Teks di Mode Malam */
-    html.dark .text-brand-ink,
-    html.dark .text-gray-900,
-    html.dark .text-gray-800,
-    html.dark .text-slate-900,
-    html.dark .text-slate-800 {
-        color: #F8FAFC !important;
-    }
-    html.dark .text-gray-700,
-    html.dark .text-gray-600,
-    html.dark .text-slate-700,
-    html.dark .text-slate-600 {
-        color: #CBD5E1 !important;
-    }
-    html.dark .text-gray-500,
-    html.dark .text-gray-400,
-    html.dark .text-slate-500,
-    html.dark .text-slate-400 {
-        color: #94A3B8 !important;
-    }
-
-    /* Badge & Aksen Pastel di Mode Malam (Agar Tidak Silau) */
-    html.dark .bg-brand-yellowSoft,
-    html.dark .bg-yellow-50,
-    html.dark .bg-amber-50,
-    html.dark .bg-amber-100 {
-        background-color: rgba(243, 198, 79, 0.16) !important;
-    }
-    html.dark .bg-brand-pinkSoft,
-    html.dark .bg-pink-50,
-    html.dark .bg-rose-50 {
-        background-color: rgba(255, 107, 139, 0.16) !important;
-    }
-    html.dark .bg-emerald-50,
-    html.dark .bg-emerald-100,
-    html.dark .bg-green-50,
-    html.dark .bg-green-100 {
-        background-color: rgba(16, 185, 129, 0.16) !important;
-    }
-    html.dark .bg-blue-50,
-    html.dark .bg-blue-100,
-    html.dark .bg-indigo-50 {
-        background-color: rgba(59, 130, 246, 0.16) !important;
-    }
-    html.dark .bg-red-50,
-    html.dark .bg-red-100 {
-        background-color: rgba(239, 68, 68, 0.16) !important;
-    }
-
-    /* Animasi Transisi Halaman SPA-Lite */
-    #public-spa-main {
-        transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .page-leaving { opacity: 0; transform: translateY(8px); }
-    .page-entering { opacity: 0; transform: translateY(-6px); }
-    #public-progress-bar { transition: width 0.3s ease, opacity 0.2s ease; }
+    /* =========================================================================
+       GLOBAL SCROLLBAR
+       ========================================================================= */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.35); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.55); }
 </style>
