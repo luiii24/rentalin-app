@@ -9,6 +9,10 @@
         foreach ($categories as $cat) {
             $categoryOptions[$cat->id] = $cat->name;
         }
+
+        $vehicleList = $vehicles instanceof \Illuminate\Pagination\AbstractPaginator
+            ? collect($vehicles->items())
+            : collect($vehicles);
     @endphp
 
     @if(session('success'))
@@ -57,6 +61,7 @@
                 $images = is_array($vehicle->images) && count($vehicle->images) > 0
                     ? array_map(fn($img) => str_starts_with($img, 'http') ? $img : asset('storage/' . $img), $vehicle->images)
                     : ['https://placehold.co/120x90/f3f4f6/9ca3af?text=Unit'];
+                $catName = $vehicle->category->name ?? ($categoryOptions[$vehicle->category_id ?? ''] ?? '-');
             @endphp
             <tr class="hover:bg-brand-canvas/60 transition">
                 <td class="py-3.5 pl-5 pr-2">
@@ -89,9 +94,9 @@
                     </div>
                 </td>
 
-                <td class="py-3.5 px-4" data-sort="{{ $vehicle->category->name ?? '' }}">
+                <td class="py-3.5 px-4" data-sort="{{ $catName }}">
                     <span class="bg-brand-canvas text-gray-600 text-[11px] font-bold px-3 py-1 rounded-full">
-                        {{ $vehicle->category->name ?? '-' }}
+                        {{ $catName }}
                     </span>
                 </td>
 
@@ -116,13 +121,22 @@
                 </td>
 
                 <td class="py-3.5 px-4 text-right">
-                    <form action="{{ route('admin.vehicles.destroy', $vehicle->id) }}" method="POST" onsubmit="return confirm('Hapus armada ini?')" class="inline">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink inline-flex items-center justify-center transition cursor-pointer" title="Hapus">
-                            <i class="bi bi-trash3-fill text-xs"></i>
+                    <div class="inline-flex items-center justify-end gap-1.5">
+                        <button type="button"
+                            onclick='openEditVehicleModal(@json($vehicle), @json($images))'
+                            title="Edit Armada"
+                            class="w-8 h-8 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink inline-flex items-center justify-center transition cursor-pointer">
+                            <i class="bi bi-pencil-fill text-xs"></i>
                         </button>
-                    </form>
+
+                        <form action="{{ route('admin.vehicles.destroy', $vehicle->id) }}" method="POST" onsubmit="return confirm('Hapus armada ini?')" class="inline">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink inline-flex items-center justify-center transition cursor-pointer" title="Hapus">
+                                <i class="bi bi-trash3-fill text-xs"></i>
+                            </button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         @empty
@@ -148,7 +162,6 @@
             </div>
 
             <div class="px-5 sm:px-6 pb-6 space-y-5">
-                <!-- Form Tambah Kategori Baru -->
                 <form action="{{ Route::has('admin.categories.store') ? route('admin.categories.store') : url('/admin/categories') }}" method="POST" class="flex items-center gap-2">
                     @csrf
                     <input type="text" name="name" required placeholder="Tipe baru (misal: SUV, Minibus, Sport...)"
@@ -159,7 +172,6 @@
                     </button>
                 </form>
 
-                <!-- Daftar Kategori Aktif -->
                 <div class="space-y-2">
                     <div class="flex items-center justify-between px-1">
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">Daftar Tipe Kendaraan</span>
@@ -167,12 +179,15 @@
                     </div>
 
                     @forelse($categories as $cat)
+                        @php
+                            $unitCount = $cat->vehicles_count
+                                ?? $vehicleList->filter(fn($v) => ($v->category_id ?? ($v->category->id ?? null)) == $cat->id)->count();
+                        @endphp
                         <div class="bg-brand-canvas rounded-2xl p-2.5 transition-all" id="cat-row-{{ $cat->id }}">
-                            <!-- Mode Tampil Normal -->
                             <div class="cat-view-mode flex items-center justify-between gap-2 pl-2">
                                 <div class="min-w-0">
                                     <p class="text-xs font-extrabold text-brand-ink truncate">{{ $cat->name }}</p>
-                                    <p class="text-[10px] text-gray-400">{{ $cat->vehicles_count ?? $cat->vehicles()->count() }} unit terdaftar</p>
+                                    <p class="text-[10px] text-gray-400">{{ $unitCount }} unit terdaftar</p>
                                 </div>
 
                                 <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -193,7 +208,6 @@
                                 </div>
                             </div>
 
-                            <!-- Mode Edit Inline -->
                             <form action="{{ Route::has('admin.categories.update') ? route('admin.categories.update', $cat->id) : url('/admin/categories/' . $cat->id) }}"
                                   method="POST" class="cat-edit-mode hidden flex items-center gap-1.5">
                                 @csrf
@@ -220,7 +234,7 @@
         </div>
     </div>
 
-    <!-- MODAL TAMBAH ARMADA (BORDERLESS + BATCH UNIT) -->
+    <!-- MODAL TAMBAH ARMADA -->
     <div id="addVehicleModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <div class="p-5 sm:p-6 flex justify-between items-center sticky top-0 bg-white z-10">
@@ -282,7 +296,7 @@
                     />
                 </div>
 
-                <!-- BAGIAN 2: DAFTAR UNIT FISIK & PLAT NOMOR (BISA 1 ATAU BANYAK SEKALIGUS) -->
+                <!-- BAGIAN 2: DAFTAR UNIT FISIK & PLAT NOMOR -->
                 <div class="bg-brand-canvas rounded-3xl p-4 space-y-3">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -291,13 +305,13 @@
                         </div>
 
                         <div class="flex items-center gap-1.5">
-                            <input type="number" id="batch-unit-count" value="1" min="1" max="30"
+                            <input type="number" id="add-batch-unit-count" value="1" min="1" max="30"
                                 class="w-12 !bg-white rounded-xl px-2 py-1.5 text-xs font-extrabold text-center">
-                            <button type="button" onclick="applyBatchUnitCount()"
+                            <button type="button" onclick="applyBatchUnitCount('add')"
                                 class="bg-white hover:opacity-90 text-brand-ink text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
                                 Set
                             </button>
-                            <button type="button" onclick="addUnitRow()"
+                            <button type="button" onclick="addUnitRow('add')"
                                 class="bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
                                 + Unit
                             </button>
@@ -313,13 +327,127 @@
                         <div></div>
                     </div>
 
-                    <div id="unit-rows-container" class="space-y-2"></div>
+                    <div id="add-unit-rows-container" class="space-y-2"></div>
                 </div>
 
                 <div class="pt-1">
                     <button type="submit"
                         class="w-full py-3.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer">
-                        Simpan Armada (<span id="submit-unit-label">1</span> Unit)
+                        Simpan Armada (<span id="add-submit-unit-label">1</span> Unit)
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL EDIT ARMADA (IDENTIK DENGAN MODAL TAMBAH ARMADA) -->
+    <div id="editVehicleModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="p-5 sm:p-6 flex justify-between items-center sticky top-0 bg-white z-10">
+                <div>
+                    <h2 class="text-lg font-extrabold text-brand-ink">Edit Armada</h2>
+                    <p class="text-[11px] text-gray-400">Perbarui info umum kendaraan dan daftar plat nomor tiap unit</p>
+                </div>
+                <button type="button" onclick="closeEditVehicleModal()" class="w-8 h-8 rounded-full bg-brand-canvas text-gray-500 hover:text-brand-ink flex items-center justify-center transition cursor-pointer">
+                    <i class="bi bi-x-lg text-xs"></i>
+                </button>
+            </div>
+
+            <form id="editVehicleForm" action="" method="POST" enctype="multipart/form-data" class="px-5 sm:px-6 pb-6 space-y-5">
+                @csrf
+                @method('PUT')
+
+                <!-- BAGIAN 1: INFORMASI UMUM KENDARAAN (1X INPUT) -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Nama Kendaraan</label>
+                        <input type="text" name="name" id="edit-v-name" required placeholder="Contoh: Toyota Avanza Veloz"
+                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="block text-xs font-extrabold text-brand-ink">Kategori</label>
+                                <button type="button" onclick="openCategoryModal()"
+                                    class="text-[11px] font-extrabold text-brand-pink hover:underline cursor-pointer">
+                                    + Edit / Tambah Tipe
+                                </button>
+                            </div>
+                            <x-select
+                                name="category_id"
+                                id="edit-v-category"
+                                placeholder="Pilih kategori"
+                                :options="$categoryOptions"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Tarif per Hari (Rp)</label>
+                            <input type="number" name="price_per_day" id="edit-v-price" required min="10000" placeholder="350000"
+                                class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Spesifikasi Singkat</label>
+                        <input type="text" name="spec" id="edit-v-spec" required placeholder="Contoh: Automatic • 7 Kursi • Bensin"
+                            class="w-full rounded-2xl px-4 py-3 text-xs font-semibold">
+                    </div>
+
+                    <!-- Preview Foto Saat Ini -->
+                    <div id="edit-v-current-images-wrap" class="hidden">
+                        <label class="block text-xs font-extrabold text-brand-ink mb-1.5">Foto Saat Ini</label>
+                        <div id="edit-v-current-images" class="flex items-center gap-2 overflow-x-auto pb-1"></div>
+                    </div>
+
+                    <x-file-upload
+                        name="images[]"
+                        label="Galeri Foto Kendaraan"
+                        accept="image/*"
+                        :multiple="true"
+                        hint="Kosongkan jika tidak ingin mengubah foto saat ini — atau pilih foto baru untuk mengganti"
+                    />
+                </div>
+
+                <!-- BAGIAN 2: DAFTAR UNIT FISIK & PLAT NOMOR -->
+                <div class="bg-brand-canvas rounded-3xl p-4 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <h3 class="text-xs font-extrabold text-brand-ink">Daftar Unit Fisik & Plat Nomor</h3>
+                            <p class="text-[11px] text-gray-500">Atur jumlah baris sesuai banyaknya unit fisik yang dimiliki</p>
+                        </div>
+
+                        <div class="flex items-center gap-1.5">
+                            <input type="number" id="edit-batch-unit-count" value="1" min="1" max="30"
+                                class="w-12 !bg-white rounded-xl px-2 py-1.5 text-xs font-extrabold text-center">
+                            <button type="button" onclick="applyBatchUnitCount('edit')"
+                                class="bg-white hover:opacity-90 text-brand-ink text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                                Set
+                            </button>
+                            <button type="button" onclick="addUnitRow('edit')"
+                                class="bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-[11px] font-extrabold px-3 py-1.5 rounded-xl transition cursor-pointer">
+                                + Unit
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="hidden sm:grid sm:grid-cols-[28px_1.35fr_0.95fr_0.8fr_1.35fr_32px] gap-2 px-3 text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                        <div class="text-center">#</div>
+                        <div>Plat Nomor</div>
+                        <div>Warna</div>
+                        <div>Tahun</div>
+                        <div>Status</div>
+                        <div></div>
+                    </div>
+
+                    <div id="edit-unit-rows-container" class="space-y-2"></div>
+                </div>
+
+                <div class="pt-1">
+                    <button type="submit"
+                        class="w-full py-3.5 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold shadow-xs transition-all cursor-pointer">
+                        Simpan Perubahan (<span id="edit-submit-unit-label">1</span> Unit)
                     </button>
                 </div>
             </form>
@@ -327,6 +455,8 @@
     </div>
 
     <script>
+        const updateVehicleRouteTemplate = @json(Route::has('admin.vehicles.update') ? route('admin.vehicles.update', '__ID__') : url('/admin/vehicles/__ID__'));
+
         function openCategoryModal() {
             const modal = document.getElementById('manageCategoriesModal');
             if (modal) modal.classList.remove('hidden');
@@ -357,60 +487,78 @@
             }
         }
 
-        (function initVehicleBatchRows() {
+        (function initVehicleUnitBatchers() {
             let rowCounter = 0;
-            const container = document.getElementById('unit-rows-container');
-            const countInput = document.getElementById('batch-unit-count');
-            const submitLabel = document.getElementById('submit-unit-label');
 
-            function createUnitRowHTML(idx, num) {
-                const statusInputId = `unit-status-${idx}`;
+            function escapeAttr(val) {
+                return String(val ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+            }
+
+            function createUnitRowHTML(prefix, idx, num, data = {}) {
+                const statusInputId = `${prefix}-unit-status-${idx}`;
+                const statusVal = data.status === 'maintenance' ? 'maintenance' : 'tersedia';
+                const statusLabel = statusVal === 'maintenance' ? 'Maintenance' : 'Tersedia';
+                const plateVal = escapeAttr(data.license_plate || '');
+                const colorVal = escapeAttr(data.color || '');
+                const yearVal = escapeAttr(data.year || '');
+                const hiddenIdField = prefix === 'edit'
+                    ? `<input type="hidden" name="units[${idx}][id]" value="${escapeAttr(data.id || '')}">`
+                    : '';
+
+                const activeOptClass = 'text-brand-pink bg-brand-pinkSoft/40 font-bold';
+                const inactiveOptClass = 'text-brand-ink font-semibold hover:bg-brand-canvas';
+
                 return `
                     <div class="unit-row bg-white rounded-2xl p-2.5 grid grid-cols-12 sm:grid-cols-[28px_1.35fr_0.95fr_0.8fr_1.35fr_32px] gap-2 items-center transition-all">
+                        ${hiddenIdField}
                         <div class="col-span-2 sm:col-span-1 text-[11px] font-extrabold text-gray-400 text-center row-num">
                             ${num}
                         </div>
                         <div class="col-span-10 sm:col-span-1">
-                            <input type="text" name="units[${idx}][license_plate]" required
+                            <input type="text" name="units[${idx}][license_plate]" value="${plateVal}" required
                                 placeholder="L 1234 AB"
                                 class="w-full rounded-xl px-2.5 py-2 font-mono text-xs font-bold uppercase">
                         </div>
                         <div class="col-span-4 sm:col-span-1">
-                            <input type="text" name="units[${idx}][color]"
+                            <input type="text" name="units[${idx}][color]" value="${colorVal}"
                                 placeholder="Warna"
                                 class="w-full rounded-xl px-2.5 py-2 text-xs font-semibold">
                         </div>
                         <div class="col-span-3 sm:col-span-1">
-                            <input type="text" name="units[${idx}][year]" maxlength="4" inputmode="numeric"
+                            <input type="text" name="units[${idx}][year]" value="${yearVal}" maxlength="4" inputmode="numeric"
                                 placeholder="Tahun"
                                 class="w-full rounded-xl px-2.5 py-2 text-xs font-semibold text-center">
                         </div>
                         <div class="col-span-4 sm:col-span-1">
                             <div class="custom-select-group relative" data-target="${statusInputId}">
-                                <input type="hidden" name="units[${idx}][status]" id="${statusInputId}" value="tersedia">
+                                <input type="hidden" name="units[${idx}][status]" id="${statusInputId}" value="${statusVal}">
                                 <button type="button" onclick="RentalinUI.toggleDropdown(event, this)"
                                     class="custom-select-trigger w-full bg-brand-canvas rounded-xl px-2.5 py-2 text-xs font-bold text-brand-ink flex items-center justify-between gap-1.5 transition cursor-pointer">
-                                    <span class="custom-select-label truncate">Tersedia</span>
+                                    <span class="custom-select-label truncate">${statusLabel}</span>
                                     <i class="bi bi-chevron-down text-[10px] text-gray-400 transition-transform duration-200 flex-shrink-0"></i>
                                 </button>
                                 <div class="custom-select-menu hidden absolute right-0 mt-1.5 w-36 bg-white rounded-2xl shadow-xl p-1.5 z-40">
                                     <button type="button" data-value="tersedia" data-label="Tersedia"
                                         onclick="RentalinUI.selectOption(this, 'tersedia', 'Tersedia')"
-                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs font-bold text-brand-pink bg-brand-pinkSoft/40 flex items-center justify-between transition cursor-pointer">
+                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs ${statusVal === 'tersedia' ? activeOptClass : inactiveOptClass} flex items-center justify-between transition cursor-pointer">
                                         <span>Tersedia</span>
-                                        <i class="bi bi-check2 text-xs"></i>
+                                        <i class="bi bi-check2 text-xs ${statusVal === 'tersedia' ? '' : 'hidden'}"></i>
                                     </button>
                                     <button type="button" data-value="maintenance" data-label="Maintenance"
                                         onclick="RentalinUI.selectOption(this, 'maintenance', 'Maintenance')"
-                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-brand-ink hover:bg-brand-canvas flex items-center justify-between transition cursor-pointer">
+                                        class="custom-option w-full px-3 py-2 rounded-xl text-left text-xs ${statusVal === 'maintenance' ? activeOptClass : inactiveOptClass} flex items-center justify-between transition cursor-pointer">
                                         <span>Maintenance</span>
-                                        <i class="bi bi-check2 text-xs hidden"></i>
+                                        <i class="bi bi-check2 text-xs ${statusVal === 'maintenance' ? '' : 'hidden'}"></i>
                                     </button>
                                 </div>
                             </div>
                         </div>
                         <div class="col-span-1 flex justify-center">
-                            <button type="button" onclick="removeUnitRow(this)" title="Hapus baris"
+                            <button type="button" onclick="removeUnitRow(this, '${prefix}')" title="Hapus baris"
                                 class="btn-del-row w-7 h-7 rounded-full hover:bg-brand-pinkSoft text-gray-400 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
                                 <i class="bi bi-x-lg text-[11px]"></i>
                             </button>
@@ -419,8 +567,12 @@
                 `;
             }
 
-            function syncRowIndexes() {
+            function syncRowIndexes(prefix) {
+                const container = document.getElementById(`${prefix}-unit-rows-container`);
+                const countInput = document.getElementById(`${prefix}-batch-unit-count`);
+                const submitLabel = document.getElementById(`${prefix}-submit-unit-label`);
                 if (!container) return;
+
                 const rows = container.querySelectorAll('.unit-row');
                 rows.forEach((row, i) => {
                     row.querySelector('.row-num').innerText = i + 1;
@@ -431,41 +583,47 @@
                 if (submitLabel) submitLabel.innerText = rows.length;
             }
 
-            window.addUnitRow = function() {
+            window.addUnitRow = function(prefix = 'add', data = {}) {
+                const container = document.getElementById(`${prefix}-unit-rows-container`);
                 if (!container) return;
                 const current = container.querySelectorAll('.unit-row').length;
-                container.insertAdjacentHTML('beforeend', createUnitRowHTML(rowCounter++, current + 1));
-                syncRowIndexes();
+                container.insertAdjacentHTML('beforeend', createUnitRowHTML(prefix, rowCounter++, current + 1, data));
+                syncRowIndexes(prefix);
             };
 
-            window.removeUnitRow = function(btn) {
+            window.removeUnitRow = function(btn, prefix = 'add') {
+                const container = document.getElementById(`${prefix}-unit-rows-container`);
                 if (!container || container.querySelectorAll('.unit-row').length <= 1) return;
                 btn.closest('.unit-row').remove();
-                syncRowIndexes();
+                syncRowIndexes(prefix);
             };
 
-            window.applyBatchUnitCount = function() {
+            window.applyBatchUnitCount = function(prefix = 'add') {
+                const container = document.getElementById(`${prefix}-unit-rows-container`);
+                const countInput = document.getElementById(`${prefix}-batch-unit-count`);
                 if (!container || !countInput) return;
+
                 const target = Math.min(Math.max(parseInt(countInput.value || 1, 10), 1), 30);
                 const currentRows = container.querySelectorAll('.unit-row');
 
                 if (target > currentRows.length) {
                     for (let i = currentRows.length; i < target; i++) {
-                        container.insertAdjacentHTML('beforeend', createUnitRowHTML(rowCounter++, i + 1));
+                        container.insertAdjacentHTML('beforeend', createUnitRowHTML(prefix, rowCounter++, i + 1));
                     }
                 } else if (target < currentRows.length) {
                     for (let i = currentRows.length - 1; i >= target; i--) {
                         currentRows[i].remove();
                     }
                 }
-                syncRowIndexes();
+                syncRowIndexes(prefix);
             };
 
             window.openAddVehicleModal = function() {
                 const modal = document.getElementById('addVehicleModal');
+                const container = document.getElementById('add-unit-rows-container');
                 if (modal) modal.classList.remove('hidden');
                 if (container && container.children.length === 0) {
-                    window.addUnitRow();
+                    window.addUnitRow('add');
                 }
             };
 
@@ -474,8 +632,61 @@
                 if (modal) modal.classList.add('hidden');
             };
 
-            if (container && container.children.length === 0) {
-                window.addUnitRow();
+            window.openEditVehicleModal = function(vehicle, resolvedImages = []) {
+                const modal = document.getElementById('editVehicleModal');
+                const form = document.getElementById('editVehicleForm');
+                const container = document.getElementById('edit-unit-rows-container');
+                if (!modal || !form || !vehicle || !container) return;
+
+                form.action = updateVehicleRouteTemplate.replace('__ID__', vehicle.id);
+
+                document.getElementById('edit-v-name').value = vehicle.name || '';
+                document.getElementById('edit-v-price').value = vehicle.price_per_day || '';
+                document.getElementById('edit-v-spec').value = vehicle.spec || '';
+
+                const catId = vehicle.category_id ?? (vehicle.category ? vehicle.category.id : '');
+                if (catId !== '' && catId !== null && window.RentalinUI) {
+                    RentalinUI.setSelectValue('edit-v-category', String(catId));
+                }
+
+                const imgWrap = document.getElementById('edit-v-current-images-wrap');
+                const imgList = document.getElementById('edit-v-current-images');
+                if (imgWrap && imgList) {
+                    imgList.innerHTML = '';
+                    if (Array.isArray(resolvedImages) && resolvedImages.length > 0) {
+                        resolvedImages.forEach(src => {
+                            imgList.insertAdjacentHTML('beforeend', `<img src="${src}" class="w-16 h-12 rounded-xl object-cover bg-brand-canvas flex-shrink-0">`);
+                        });
+                        imgWrap.classList.remove('hidden');
+                    } else {
+                        imgWrap.classList.add('hidden');
+                    }
+                }
+
+                container.innerHTML = '';
+                const units = Array.isArray(vehicle.units) && vehicle.units.length > 0
+                    ? vehicle.units
+                    : [{
+                        id: vehicle.id,
+                        license_plate: vehicle.license_plate || '',
+                        color: vehicle.color || '',
+                        year: vehicle.year || '',
+                        status: vehicle.status || 'tersedia',
+                    }];
+
+                units.forEach(u => window.addUnitRow('edit', u));
+
+                modal.classList.remove('hidden');
+            };
+
+            window.closeEditVehicleModal = function() {
+                const modal = document.getElementById('editVehicleModal');
+                if (modal) modal.classList.add('hidden');
+            };
+
+            const addContainer = document.getElementById('add-unit-rows-container');
+            if (addContainer && addContainer.children.length === 0) {
+                window.addUnitRow('add');
             }
         })();
     </script>
