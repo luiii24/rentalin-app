@@ -107,10 +107,10 @@ $makeDummyRental = function ($code, $vehicle) {
         'method' => 'Transfer Bank / QRIS',
         'payment_method' => 'Transfer Bank / QRIS',
         'amount' => 700000,
-        'status' => 'verified',
-        'payment_status' => 'paid',
+        'status' => 'pending',
+        'payment_status' => 'pending',
         'proof_image' => null,
-        'paid_at' => now(),
+        'paid_at' => null,
     ];
 
     return (object) [
@@ -125,8 +125,9 @@ $makeDummyRental = function ($code, $vehicle) {
         'return_date' => now()->addDays(2),
         'duration_days' => 2,
         'total_price' => 700000,
-        'payment_status' => 'paid',
-        'status' => 'aktif',
+        'payment_status' => 'pending',
+        'payment_proof' => null,
+        'status' => 'menunggu_pembayaran',
         'notes' => 'Ambil unit di garasi utama pukul 09.00 WIB.',
         'created_at' => now(),
     ];
@@ -210,7 +211,7 @@ Route::post('/logout', function (Request $request) {
 |--------------------------------------------------------------------------
 */
 Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $makeDummyRental) {
-    // Dashboard Utama Admin
+    // Ringkasan Dashboard Utama Admin (Statistik + Ringkasan Armada + Upload QRIS Toko)
     Route::get('/dashboard', function () use ($getFleetData) {
         [$categories, $vehicles] = $getFleetData();
 
@@ -225,8 +226,8 @@ Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $
                 'return_date' => now()->addDays(2),
                 'duration_days' => 2,
                 'total_price' => 700000,
-                'payment_status' => 'paid',
-                'status' => 'aktif',
+                'payment_status' => 'pending',
+                'status' => 'menunggu_konfirmasi',
             ],
             (object) [
                 'id' => 2,
@@ -238,14 +239,14 @@ Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $
                 'return_date' => now()->addDays(4),
                 'duration_days' => 3,
                 'total_price' => 360000,
-                'payment_status' => 'unpaid',
-                'status' => 'menunggu',
+                'payment_status' => 'pending',
+                'status' => 'menunggu_pembayaran',
             ],
         ]);
 
         $totalRevenue = $rentals->where('payment_status', 'paid')->sum('total_price');
         $activeRentals = $rentals->where('status', 'aktif')->count();
-        $pendingRentals = $rentals->where('status', 'menunggu')->count();
+        $pendingRentals = $rentals->whereIn('status', ['menunggu', 'menunggu_pembayaran', 'menunggu_konfirmasi'])->count();
         $availableVehicles = $vehicles->where('status', 'tersedia')->count();
 
         return view('admin.dashboard', compact(
@@ -259,9 +260,19 @@ Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $
         ));
     })->name('dashboard');
 
-    // Halaman Scan QR / Verifikasi Nota
-    Route::get('/scan', function () {
-        return view('admin.scan');
+    // Halaman Khusus Transaksi & Scan QR
+    Route::get('/transactions', function () use ($getFleetData) {
+        [$categories, $vehicles] = $getFleetData();
+
+        return view('admin.transactions', compact('categories', 'vehicles'));
+    })->name('transactions');
+
+    // Halaman Scan QR / Verifikasi Nota (Arahkan ke halaman transaksi & scan QR)
+    Route::get('/scan', function () use ($getFleetData) {
+        [$categories, $vehicles] = $getFleetData();
+
+        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.scan';
+        return view($viewName, compact('categories', 'vehicles'));
     })->name('scan');
 
     // Halaman Cetak / Detail Nota Admin
