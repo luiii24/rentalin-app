@@ -31,13 +31,12 @@ class VehicleController extends Controller
             'units'                   => ['required', 'array', 'min:1'],
             'units.*.license_plate'   => ['required', 'string', 'max:30'],
             'units.*.color_year'      => ['nullable', 'string', 'max:100'],
-            'units.*.status'          => ['required', 'in:tersedia,disewa,maintenance'],
+            'units.*.status'          => ['required', 'in:tersedia,maintenance,disewa'],
         ]);
 
-        $originalName = trim((string) ($request->input('original_name') ?: $request->input('name')));
+        $originalName  = trim((string) ($request->input('original_name') ?: $request->input('name')));
         $existingGroup = Vehicle::whereRaw('LOWER(TRIM(name)) = ?', [strtolower($originalName)])->get();
 
-        // Gunakan foto lama jika admin tidak mengunggah foto baru saat edit
         $imagePaths = $existingGroup->first()?->images ?? [];
         if ($request->hasFile('images')) {
             $uploaded = [];
@@ -49,8 +48,9 @@ class VehicleController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $existingGroup, $imagePaths) {
+        $savedVehicles = DB::transaction(function () use ($request, $existingGroup, $imagePaths) {
             $keptIds = [];
+            $records = [];
 
             foreach ($request->input('units', []) as $idx => $unitData) {
                 $unitId   = !empty($unitData['unit_id']) ? (int) $unitData['unit_id'] : null;
@@ -62,19 +62,24 @@ class VehicleController extends Controller
                     $plate = 'UNIT-' . strtoupper(Str::random(5)) . '-' . ($idx + 1);
                 }
 
-                // Gabungkan spesifikasi utama & warna/tahun ke kolom spec
                 $fullSpec = trim((string) $request->input('spec'));
                 if ($colorYr !== '') {
                     $fullSpec .= ' | ' . $colorYr;
                 }
 
-                // Pemetaan status UI ke enum database ['tersedia', 'habis', 'maintenance']
-                $dbStatus   = $uiStatus === 'disewa' ? 'habis' : $uiStatus;
-                $availStock = $uiStatus === 'tersedia' ? 1 : 0;
-
                 $vehicle = $unitId ? Vehicle::find($unitId) : null;
                 if (!$vehicle) {
                     $vehicle = Vehicle::where('license_plate', $plate)->first();
+                }
+
+                // Jika unit sedang dalam masa sewa aktif, pertahankan status 'habis'
+                $hasActiveRental = $vehicle ? $vehicle->rentals()->where('status', 'active')->exists() : false;
+                if ($hasActiveRental || $uiStatus === 'disewa') {
+                    $dbStatus   = 'habis';
+                    $availStock = 0;
+                } else {
+                    $dbStatus   = $uiStatus === 'maintenance' ? 'maintenance' : 'tersedia';
+                    $availStock = $dbStatus === 'tersedia' ? 1 : 0;
                 }
 
                 $payload = [
@@ -96,9 +101,9 @@ class VehicleController extends Controller
                 }
 
                 $keptIds[] = $vehicle->id;
+                $records[] = $vehicle->fresh('category');
             }
 
-            // Hapus unit fisik yang dihapus dari daftar unit di modal (jika tidak sedang disewa aktif)
             if ($existingGroup->isNotEmpty()) {
                 $toDelete = $existingGroup->whereNotIn('id', $keptIds);
                 foreach ($toDelete as $oldUnit) {
@@ -107,27 +112,76 @@ class VehicleController extends Controller
                     }
                 }
             }
+
+            return $records;
         });
+
+        $first    = $savedVehicles[0];
+        $category = $first->category;
+
+        $groupPayload = [
+            'id'            => $first->id,
+            'group_key'     => strtolower(trim($first->name)),
+            'name'          => $first->name,
+            'category_id'   => $first->category_id,
+            'category_name' => $category?->name ?? 'Umum',
+            'category_slug' => $category?->slug ?? 'all',
+            'price_per_day' => (int) $first->price_per_day,
+            'spec'          => $first->clean_spec ?? explode(' | ', $first->spec ?? '')[0],
+            'images'        => is_array($first->images) ? $first->images : [],
+            'units'         => collect($savedVehicles)->map(function ($u) {
+                return [
+                    'unit_id'       => $u->id,
+                    'license_plate' => $u->license_plate,
+                    'color_year'    => $u->color_year ?? (explode(' | ', $u->spec ?? '')[1] ?? ''),
+                    'status'        => $u->status === 'habis' ? 'disewa' : $u->status,
+                ];
+            })->values()->all(),
+        ];
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success'          => true,
+                'message'          => 'Data armada dan daftar unit berhasil disimpan ke database.',
+                'old_group_key'    => strtolower($originalName),
+                'group'            => $groupPayload,
+                'destroy_url'      => route('admin.vehicles.destroy', $first->id),
+            ]);
+        }
 
         return redirect()
             ->route('admin.vehicles.index')
             ->with('success', 'Data armada dan daftar unit berhasil disimpan ke database.');
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $target = Vehicle::findOrFail($id);
-        $groupUnits = Vehicle::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($target->name))])->get();
+        $groupKey = strtolower(trim($target->name));
+        $groupUnits = Vehicle::whereRaw('LOWER(TRIM(name)) = ?', [$groupKey])->get();
 
         foreach ($groupUnits as $unit) {
             if ($unit->rentals()->where('status', 'active')->exists()) {
-                return back()->with('error', "Armada {$target->name} ({$unit->license_plate}) masih dalam masa sewa aktif.");
+                $msg = "Armada {$target->name} ({$unit->license_plate}) masih dalam masa sewa aktif.";
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'message' => $msg], 422);
+                }
+                return back()->with('error', $msg);
             }
         }
 
         Vehicle::whereIn('id', $groupUnits->pluck('id'))->delete();
+        $msg = "Armada {$target->name} beserta seluruh unitnya berhasil dihapus.";
 
-        return back()->with('success', "Armada {$target->name} beserta seluruh unitnya berhasil dihapus.");
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success'   => true,
+                'message'   => $msg,
+                'group_key' => $groupKey,
+            ]);
+        }
+
+        return back()->with('success', $msg);
     }
 
     public function storeCategory(Request $request)

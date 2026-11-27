@@ -8,18 +8,61 @@ use App\Models\Rental;
 use App\Models\Vehicle;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class PublicController extends Controller
 {
+    /**
+     * Mengelompokkan unit fisik berdasarkan nama model armada menjadi 1 item general
+     * agar tidak tampil duplikat di halaman Beranda maupun Katalog.
+     */
+    private function groupVehiclesGeneral(Collection $rawVehicles): Collection
+    {
+        return $rawVehicles
+            ->groupBy(fn ($v) => strtolower(trim((string) $v->name)))
+            ->map(function (Collection $units) {
+                $availableUnits = $units->filter(fn ($u) => $u->status === 'tersedia');
+                $primaryUnit    = $availableUnits->first() ?? $units->first();
+
+                $unitWithImages = $units->first(fn ($u) => is_array($u->images) && count($u->images) > 0);
+                $images         = $unitWithImages ? $unitWithImages->images : [];
+
+                $cleanSpec  = trim(explode(' | ', (string) ($primaryUnit->spec ?? ''))[0]);
+                $availCount = $availableUnits->count();
+                $totalCount = $units->count();
+                $category   = $primaryUnit->category;
+
+                return (object) [
+                    'id'                 => $primaryUnit->id,
+                    'available_unit_ids' => $availableUnits->pluck('id')->values()->all(),
+                    'name'               => $primaryUnit->name,
+                    'license_plate'      => $primaryUnit->license_plate,
+                    'spec'               => $cleanSpec,
+                    'clean_spec'         => $cleanSpec,
+                    'price_per_day'      => (int) $primaryUnit->price_per_day,
+                    'total_stock'        => $totalCount,
+                    'available_stock'    => $availCount,
+                    'status'             => $availCount > 0 ? 'tersedia' : 'habis',
+                    'images'             => $images,
+                    'category_id'        => $primaryUnit->category_id,
+                    'category'           => (object) [
+                        'id'   => $category?->id ?? 0,
+                        'name' => $category?->name ?? 'Umum',
+                        'slug' => $category?->slug ?? 'all',
+                    ],
+                ];
+            })
+            ->sortBy(fn ($item) => $item->available_stock > 0 ? 0 : 1)
+            ->values();
+    }
+
     public function home()
     {
-        $categories = Category::orderBy('id')->get();
-        $vehicles   = Vehicle::with('category')
-            ->orderByRaw("CASE WHEN status = 'tersedia' THEN 0 ELSE 1 END")
-            ->orderBy('id')
-            ->get();
+        $categories  = Category::orderBy('id')->get();
+        $rawVehicles = Vehicle::with('category')->orderBy('id')->get();
+        $vehicles    = $this->groupVehiclesGeneral($rawVehicles);
 
         return view('welcome', compact('categories', 'vehicles'));
     }
@@ -31,11 +74,9 @@ class PublicController extends Controller
 
     public function catalog()
     {
-        $categories = Category::orderBy('id')->get();
-        $vehicles   = Vehicle::with('category')
-            ->orderByRaw("CASE WHEN status = 'tersedia' THEN 0 ELSE 1 END")
-            ->orderBy('id')
-            ->get();
+        $categories  = Category::orderBy('id')->get();
+        $rawVehicles = Vehicle::with('category')->orderBy('id')->get();
+        $vehicles    = $this->groupVehiclesGeneral($rawVehicles);
 
         return view('catalog', compact('categories', 'vehicles'));
     }
@@ -57,11 +98,24 @@ class PublicController extends Controller
         }
 
         $rental = DB::transaction(function () use ($validated, $pickupDateTime) {
-            $vehicle = Vehicle::where('id', $validated['vehicle_id'])
-                ->lockForUpdate()
-                ->firstOrFail();
+            $requestedVehicle = Vehicle::findOrFail($validated['vehicle_id']);
 
-            if ($vehicle->status !== 'tersedia' || $vehicle->available_stock < 1) {
+            // Kunci unit yang dipilih jika masih tersedia
+            $vehicle = Vehicle::where('id', $requestedVehicle->id)
+                ->where('status', 'tersedia')
+                ->lockForUpdate()
+                ->first();
+
+            // Jika unit utama kebetulan sudah dibooking, otomatis ambil unit lain dengan model yang sama
+            if (!$vehicle) {
+                $vehicle = Vehicle::whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($requestedVehicle->name))])
+                    ->where('status', 'tersedia')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            if (!$vehicle || $vehicle->available_stock < 1) {
                 return null;
             }
 
@@ -86,7 +140,6 @@ class PublicController extends Controller
                 'payment_status' => 'unpaid',
             ]);
 
-            // Kunci unit agar tidak dibooking ganda selama menunggu pembayaran & verifikasi
             $newStock = max(0, $vehicle->available_stock - 1);
             $vehicle->update([
                 'available_stock' => $newStock,
@@ -99,7 +152,7 @@ class PublicController extends Controller
         if (!$rental) {
             return back()
                 ->withInput()
-                ->with('error', 'Maaf, unit kendaraan ini baru saja dipesan atau sedang tidak tersedia.');
+                ->with('error', 'Maaf, seluruh unit untuk armada ini baru saja dipesan atau sedang tidak tersedia.');
         }
 
         return redirect()->route('booking.invoice', $rental->booking_code);

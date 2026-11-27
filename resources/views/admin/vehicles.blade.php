@@ -73,17 +73,6 @@
         $groupedVehiclesList = array_values($groupedVehicles);
     @endphp
 
-    @if(session('success'))
-        <div class="mb-4 px-4 py-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-2">
-            <i class="bi bi-check-circle-fill"></i> {{ session('success') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="mb-4 px-4 py-3 rounded-2xl bg-brand-pinkSoft border border-brand-pink/30 text-brand-pink text-xs font-bold flex items-center gap-2">
-            <i class="bi bi-exclamation-circle-fill"></i> {{ session('error') }}
-        </div>
-    @endif
-
     <!-- HEADER HALAMAN -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
         <div>
@@ -142,7 +131,7 @@
         </div>
 
         <p class="text-xs text-gray-400">
-            Menampilkan <strong id="fleet-visible-count" class="text-brand-ink">{{ count($groupedVehiclesList) }}</strong> dari <strong class="text-brand-ink">{{ count($groupedVehiclesList) }}</strong> armada
+            Menampilkan <strong id="fleet-visible-count" class="text-brand-ink">{{ count($groupedVehiclesList) }}</strong> dari <strong id="fleet-total-count" class="text-brand-ink">{{ count($groupedVehiclesList) }}</strong> armada
         </p>
     </div>
 
@@ -229,16 +218,12 @@
                             <i class="bi bi-pencil-fill text-xs"></i>
                         </button>
 
-                        <form action="{{ route('admin.vehicles.destroy', $group['id']) }}" method="POST"
-                              onsubmit="return confirm('Hapus armada {{ addslashes($group['name']) }} beserta unitnya?')"
-                              class="inline">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit" title="Hapus Armada"
-                                class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
-                                <i class="bi bi-trash-fill text-xs"></i>
-                            </button>
-                        </form>
+                        <button type="button"
+                            onclick="confirmDeleteVehicle('{{ route('admin.vehicles.destroy', $group['id']) }}', {{ json_encode($group['name']) }})"
+                            title="Hapus Armada"
+                            class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
+                            <i class="bi bi-trash-fill text-xs"></i>
+                        </button>
                     </div>
                 </td>
             </tr>
@@ -264,8 +249,8 @@
                 </button>
             </div>
 
-            <form action="{{ route('admin.vehicles.store') }}" method="POST" enctype="multipart/form-data"
-                  onsubmit="prepareVehicleFormBeforeSubmit()" class="space-y-4">
+            <form id="vehicleFormElement" action="{{ route('admin.vehicles.store') }}" method="POST" enctype="multipart/form-data"
+                  onsubmit="submitVehicleFormAjax(event)" class="space-y-4">
                 @csrf
                 <input type="hidden" name="vehicle_id" id="veh-id">
                 <input type="hidden" name="original_name" id="veh-original-name">
@@ -333,7 +318,7 @@
                                     1 Tersedia / 1 Unit
                                 </span>
                             </h4>
-                            <p class="text-[11px] text-gray-400">Setiap unit memiliki plat nomor, warna/tahun, dan status masing-masing</p>
+                            <p class="text-[11px] text-gray-400">Setiap unit memiliki plat nomor, warna/tahun, dan kondisi kesiapan unit</p>
                         </div>
 
                         <button type="button" onclick="addVehicleUnitRow()"
@@ -351,7 +336,7 @@
                         class="flex-1 py-3 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition cursor-pointer">
                         Batal
                     </button>
-                    <button type="submit"
+                    <button type="submit" id="btn-submit-vehicle"
                         class="flex-[2] py-3 rounded-full bg-brand-pink hover:bg-brand-pinkHover text-white text-xs font-extrabold transition cursor-pointer">
                         Simpan Armada &amp; Unit
                     </button>
@@ -384,7 +369,6 @@
                         <i class="bi bi-plus-lg"></i> Tambah
                     </button>
                 </div>
-                <p id="category-toast-msg" class="hidden text-[11px] font-bold mt-2"></p>
             </form>
 
             <div id="category-items-list" class="space-y-2 max-h-64 overflow-y-auto pr-1 mb-5"></div>
@@ -410,16 +394,6 @@
         window.editingCatId = null;
         window.openedCatFromVehicleModal = false;
         window.currentModalUnits = [];
-
-        function showCatToast(msg, isError = false) {
-            const el = document.getElementById('category-toast-msg');
-            if (!el) return;
-            el.innerText = msg;
-            el.className = `text-[11px] font-bold mt-2 ${isError ? 'text-brand-pink' : 'text-emerald-600'}`;
-            el.classList.remove('hidden');
-            clearTimeout(window.catToastTimer);
-            window.catToastTimer = setTimeout(() => el.classList.add('hidden'), 2800);
-        }
 
         function renderCategoryListAndDropdowns(preferredVehCatId = null) {
             const listContainer = document.getElementById('category-items-list');
@@ -469,7 +443,6 @@
                 }
             }
 
-            // Sinkronisasi dropdown kategori di modal Tambah/Edit Armada (aman dari karakter kutip)
             const vehInput = document.getElementById('veh-category');
             const vehGroup = vehInput?.closest('.custom-select-group');
             const vehMenu  = vehGroup?.querySelector('.custom-select-menu');
@@ -495,7 +468,6 @@
                 }
             }
 
-            // Sinkronisasi dropdown filter kategori di atas tabel
             const filterInput = document.getElementById('fleet-filter-category');
             const filterGroup = filterInput?.closest('.custom-select-group');
             const filterMenu  = filterGroup?.querySelector('.custom-select-menu');
@@ -550,20 +522,25 @@
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    showCatToast(data.message || 'Gagal menambah kategori.', true);
+                    RentalinPopup.show({ type: 'failed', title: 'Gagal Menambah Kategori', message: data.message || 'Nama kategori sudah ada atau tidak valid.' });
                     return;
                 }
 
                 window.fleetCategories.push(data.category);
                 input.value = '';
                 renderCategoryListAndDropdowns(data.category.id);
-                showCatToast(`Kategori "${data.category.name}" berhasil disimpan.`);
 
                 if (window.openedCatFromVehicleModal) {
-                    setTimeout(() => closeCategoryModal(), 300);
+                    closeCategoryModal();
                 }
+
+                RentalinPopup.show({
+                    type: 'success',
+                    title: 'Kategori Ditambahkan',
+                    message: `Kategori "${data.category.name}" berhasil disimpan ke database.`,
+                });
             } catch (err) {
-                showCatToast('Terjadi kesalahan jaringan.', true);
+                RentalinPopup.show({ type: 'failed', title: 'Kesalahan Jaringan', message: 'Tidak dapat terhubung ke server.' });
             }
         }
 
@@ -601,7 +578,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok) {
-                    showCatToast(data.message || 'Gagal memperbarui kategori.', true);
+                    RentalinPopup.show({ type: 'failed', title: 'Gagal Memperbarui', message: data.message || 'Gagal memperbarui kategori.' });
                     return;
                 }
 
@@ -619,37 +596,45 @@
 
                 window.editingCatId = null;
                 renderCategoryListAndDropdowns();
-                showCatToast('Nama kategori berhasil diperbarui.');
+                RentalinPopup.show({ type: 'success', title: 'Kategori Diperbarui', message: `Nama kategori diubah menjadi "${data.category.name}".` });
             } catch (err) {
-                showCatToast('Terjadi kesalahan jaringan.', true);
+                RentalinPopup.show({ type: 'failed', title: 'Kesalahan Jaringan', message: 'Tidak dapat terhubung ke server.' });
             }
         }
 
-        async function removeCategory(id) {
+        function removeCategory(id) {
             const target = window.fleetCategories.find(c => Number(c.id) === Number(id));
             if (!target) return;
-            if (!confirm(`Hapus kategori "${target.name}"?`)) return;
 
-            try {
-                const res = await fetch(`/portal/categories/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': CSRF_TOKEN,
-                    },
-                });
-                const data = await res.json();
-                if (!res.ok) {
-                    showCatToast(data.message || 'Kategori gagal dihapus.', true);
-                    return;
-                }
+            RentalinPopup.confirm({
+                type: 'warning',
+                title: 'Hapus Kategori?',
+                message: `Kategori "${target.name}" akan dihapus permanen dari database. Lanjutkan?`,
+                confirmText: 'Ya, Hapus',
+                cancelText: 'Tidak',
+                onConfirm: async () => {
+                    try {
+                        const res = await fetch(`/portal/categories/${id}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': CSRF_TOKEN,
+                            },
+                        });
+                        const data = await res.json();
+                        if (!res.ok) {
+                            RentalinPopup.show({ type: 'failed', title: 'Tidak Dapat Menghapus', message: data.message || 'Kategori masih digunakan oleh armada.' });
+                            return;
+                        }
 
-                window.fleetCategories = window.fleetCategories.filter(c => Number(c.id) !== Number(id));
-                renderCategoryListAndDropdowns();
-                showCatToast(`Kategori "${target.name}" dihapus.`);
-            } catch (err) {
-                showCatToast('Terjadi kesalahan jaringan.', true);
-            }
+                        window.fleetCategories = window.fleetCategories.filter(c => Number(c.id) !== Number(id));
+                        renderCategoryListAndDropdowns();
+                        RentalinPopup.show({ type: 'success', title: 'Kategori Dihapus', message: `Kategori "${target.name}" berhasil dihapus.` });
+                    } catch (err) {
+                        RentalinPopup.show({ type: 'failed', title: 'Kesalahan Jaringan', message: 'Tidak dapat terhubung ke server.' });
+                    }
+                },
+            });
         }
 
         // ================= MANAJEMEN DAFTAR UNIT DI BAWAH FORM GLOBAL =================
@@ -669,15 +654,44 @@
             const container = document.getElementById('vehicle-units-list');
             if (!container) return;
 
+            // Hanya Tersedia & Maintenance (Disewa otomatis dari transaksi)
             const statusLabels = {
                 tersedia: 'Tersedia',
-                disewa: 'Disewa',
                 maintenance: 'Maintenance',
             };
 
             container.innerHTML = window.currentModalUnits.map((unit, idx) => {
+                const isRented = unit.status === 'disewa';
                 const currentStatus = statusLabels[unit.status] ? unit.status : 'tersedia';
                 const currentLabel  = statusLabels[currentStatus];
+
+                const statusControlHtml = isRented
+                    ? `<span class="px-3.5 py-2 rounded-2xl bg-sky-500/15 text-sky-600 dark:text-sky-400 text-xs font-extrabold inline-flex items-center gap-1.5">
+                           <span class="w-1.5 h-1.5 rounded-full bg-sky-500"></span> Sedang Disewa
+                       </span>`
+                    : `<div class="w-36 relative custom-select-group" data-target="veh-unit-status-${idx}" data-onchange="onUnitStatusSelectChange">
+                           <input type="hidden" id="veh-unit-status-${idx}" value="${currentStatus}">
+                           <button type="button" onclick="RentalinUI.toggleDropdown(event, this)"
+                               class="custom-select-trigger w-full bg-white border border-gray-200 rounded-2xl px-3.5 py-2 text-left text-xs font-semibold text-brand-ink flex items-center justify-between transition-all duration-200 cursor-pointer">
+                               <span class="custom-select-label truncate">${currentLabel}</span>
+                               <i class="bi bi-chevron-down text-xs text-gray-500 transition-transform duration-200"></i>
+                           </button>
+                           <div onclick="event.stopPropagation()" class="custom-select-menu hidden absolute left-0 right-0 mt-1.5 bg-white rounded-2xl shadow-[0_14px_34px_rgba(0,0,0,0.14)] border border-gray-100 py-1.5 z-50">
+                               ${Object.entries(statusLabels).map(([val, lbl]) => {
+                                   const active = val === currentStatus;
+                                   return `
+                                       <button type="button"
+                                           data-value="${val}"
+                                           data-label="${lbl}"
+                                           onclick="RentalinUI.selectOption(this, this.dataset.value, this.dataset.label)"
+                                           class="custom-option w-full text-left px-3.5 py-2 text-xs font-semibold transition flex items-center justify-between hover:bg-brand-pinkSoft/60 hover:text-brand-pink ${active ? 'text-brand-pink bg-brand-pinkSoft/40 font-bold' : 'text-brand-ink'}">
+                                           <span>${lbl}</span>
+                                           <i class="bi bi-check2 text-sm ${active ? '' : 'hidden'}"></i>
+                                       </button>
+                                   `;
+                               }).join('')}
+                           </div>
+                       </div>`;
 
                 return `
                     <div class="p-3 rounded-2xl bg-brand-canvas border border-gray-200/80 flex flex-col sm:flex-row sm:items-center gap-2.5">
@@ -699,34 +713,12 @@
                         </div>
 
                         <div class="flex items-center justify-end gap-2">
-                            <div class="w-36 relative custom-select-group" data-target="veh-unit-status-${idx}" data-onchange="onUnitStatusSelectChange">
-                                <input type="hidden" id="veh-unit-status-${idx}" value="${currentStatus}">
-                                <button type="button" onclick="RentalinUI.toggleDropdown(event, this)"
-                                    class="custom-select-trigger w-full bg-white border border-gray-200 rounded-2xl px-3.5 py-2 text-left text-xs font-semibold text-brand-ink flex items-center justify-between transition-all duration-200 cursor-pointer">
-                                    <span class="custom-select-label truncate">${currentLabel}</span>
-                                    <i class="bi bi-chevron-down text-xs text-gray-500 transition-transform duration-200"></i>
-                                </button>
-                                <div onclick="event.stopPropagation()" class="custom-select-menu hidden absolute left-0 right-0 mt-1.5 bg-white rounded-2xl shadow-[0_14px_34px_rgba(0,0,0,0.14)] border border-gray-100 py-1.5 z-50">
-                                    ${Object.entries(statusLabels).map(([val, lbl]) => {
-                                        const active = val === currentStatus;
-                                        return `
-                                            <button type="button"
-                                                data-value="${val}"
-                                                data-label="${lbl}"
-                                                onclick="RentalinUI.selectOption(this, this.dataset.value, this.dataset.label)"
-                                                class="custom-option w-full text-left px-3.5 py-2 text-xs font-semibold transition flex items-center justify-between hover:bg-brand-pinkSoft/60 hover:text-brand-pink ${active ? 'text-brand-pink bg-brand-pinkSoft/40 font-bold' : 'text-brand-ink'}">
-                                                <span>${lbl}</span>
-                                                <i class="bi bi-check2 text-sm ${active ? '' : 'hidden'}"></i>
-                                            </button>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            </div>
+                            ${statusControlHtml}
 
                             <button type="button"
                                 onclick="removeVehicleUnitRow(${idx})"
-                                ${window.currentModalUnits.length <= 1 ? 'disabled' : ''}
-                                title="${window.currentModalUnits.length <= 1 ? 'Minimal 1 unit' : 'Hapus Unit Ini'}"
+                                ${(window.currentModalUnits.length <= 1 || isRented) ? 'disabled' : ''}
+                                title="${isRented ? 'Unit sedang disewa' : (window.currentModalUnits.length <= 1 ? 'Minimal 1 unit' : 'Hapus Unit Ini')}"
                                 class="w-8 h-8 rounded-full bg-white hover:bg-brand-pinkSoft disabled:opacity-35 text-gray-500 hover:text-brand-pink flex items-center justify-center flex-shrink-0 transition cursor-pointer">
                                 <i class="bi bi-trash-fill text-xs"></i>
                             </button>
@@ -772,11 +764,120 @@
 
         function removeVehicleUnitRow(index) {
             if (window.currentModalUnits.length <= 1) return;
+            if (window.currentModalUnits[index]?.status === 'disewa') return;
             window.currentModalUnits.splice(index, 1);
             renderVehicleUnitsList();
         }
 
-        function prepareVehicleFormBeforeSubmit() {
+        function buildVehicleTableRowElement(group, destroyUrl) {
+            const thumb = (Array.isArray(group.images) && group.images.length > 0)
+                ? (String(group.images[0]).startsWith('http') ? group.images[0] : `${STORAGE_BASE_URL}/${group.images[0]}`)
+                : 'https://placehold.co/120x90/f3f4f6/9ca3af?text=Unit';
+
+            const totalUnits  = group.units.length;
+            const availUnits  = group.units.filter(u => u.status === 'tersedia').length;
+            const rentedUnits = group.units.filter(u => u.status === 'disewa').length;
+            const maintUnits  = group.units.filter(u => u.status === 'maintenance').length;
+
+            const allPlates = group.units.map(u => u.license_plate).join(' ');
+            const allColors = group.units.map(u => u.color_year || '').join(' ');
+            const searchHaystack = `${group.name} ${allPlates} ${group.category_name} ${group.spec} ${allColors}`.toLowerCase();
+
+            const unitBadgesHtml = group.units.map(u => {
+                const dotColor = u.status === 'tersedia'
+                    ? 'bg-emerald-500'
+                    : (u.status === 'maintenance' ? 'bg-amber-500' : 'bg-sky-500');
+                return `
+                    <span class="inline-flex items-center gap-1 font-mono text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-brand-canvas border border-gray-200/80 text-brand-ink">
+                        <span class="w-1.5 h-1.5 rounded-full ${dotColor}"></span>
+                        ${escapeHtmlText(u.license_plate)}
+                    </span>
+                `;
+            }).join('');
+
+            let generalStatusHtml = '';
+            if (availUnits > 0) {
+                generalStatusHtml += `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Tersedia ${availUnits}</span>`;
+            }
+            if (rentedUnits > 0) {
+                generalStatusHtml += `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-blue-500/15 text-blue-600 dark:text-blue-400"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span> Disewa ${rentedUnits}</span>`;
+            }
+            if (maintUnits > 0) {
+                generalStatusHtml += `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-amber-500/15 text-amber-600 dark:text-amber-400"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span> Maintenance ${maintUnits}</span>`;
+            }
+
+            const tr = document.createElement('tr');
+            tr.className = 'vehicle-row hover:bg-brand-canvas/40 transition';
+            tr.dataset.groupKey = group.group_key;
+            tr.dataset.category = group.category_slug;
+            tr.dataset.categoryId = group.category_id;
+            tr.dataset.avail = availUnits;
+            tr.dataset.rented = rentedUnits;
+            tr.dataset.maint = maintUnits;
+            tr.dataset.search = searchHaystack;
+
+            const groupJsonAttr = escapeHtmlText(JSON.stringify(group));
+            const destroyUrlAttr = escapeHtmlText(destroyUrl);
+            const nameJsonAttr   = escapeHtmlText(JSON.stringify(group.name));
+
+            tr.innerHTML = `
+                <td class="py-3.5 pl-5 pr-2">
+                    <input type="checkbox" class="w-4 h-4 rounded bg-brand-canvas accent-brand-pink cursor-pointer">
+                </td>
+                <td class="py-3.5 px-4" data-sort="${escapeHtmlText(group.name)}">
+                    <div class="flex items-start gap-3.5">
+                        <img src="${escapeHtmlText(thumb)}" alt="${escapeHtmlText(group.name)}"
+                             class="w-12 h-10 rounded-xl object-cover bg-brand-canvas border border-gray-200/70 flex-shrink-0 mt-0.5">
+                        <div class="min-w-0">
+                            <span class="font-extrabold text-brand-ink text-xs sm:text-sm block">${escapeHtmlText(group.name)}</span>
+                            <p class="text-[11px] text-gray-400 mt-0.5 truncate">${escapeHtmlText(group.spec)}</p>
+                            <div class="row-unit-badges flex flex-wrap items-center gap-1.5 mt-1.5">${unitBadgesHtml}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="py-3.5 px-4 vehicle-cat-cell" data-sort="${escapeHtmlText(group.category_name)}">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-brand-canvas text-brand-ink">${escapeHtmlText(group.category_name)}</span>
+                </td>
+                <td class="py-3.5 px-4 font-extrabold text-brand-ink" data-sort="${group.price_per_day}">
+                    Rp ${Number(group.price_per_day || 0).toLocaleString('id-ID')}
+                </td>
+                <td class="py-3.5 px-4 font-bold text-brand-ink whitespace-nowrap row-stock-cell" data-sort="${availUnits}">
+                    ${availUnits} / ${totalUnits} Unit
+                </td>
+                <td class="py-3.5 px-4 row-status-cell" data-sort="${availUnits}">
+                    <div class="flex flex-wrap items-center gap-1.5">${generalStatusHtml}</div>
+                </td>
+                <td class="py-3.5 px-4 text-right whitespace-nowrap">
+                    <div class="inline-flex items-center gap-1.5">
+                        <button type="button"
+                            onclick='openVehicleModal(${groupJsonAttr})'
+                            title="Edit Armada & Daftar Unit"
+                            class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-yellowSoft text-brand-ink flex items-center justify-center transition cursor-pointer">
+                            <i class="bi bi-pencil-fill text-xs"></i>
+                        </button>
+                        <button type="button"
+                            onclick='confirmDeleteVehicle("${destroyUrlAttr}", ${nameJsonAttr})'
+                            title="Hapus Armada"
+                            class="w-8 h-8 rounded-full bg-brand-canvas hover:bg-brand-pinkSoft text-gray-500 hover:text-brand-pink flex items-center justify-center transition cursor-pointer">
+                            <i class="bi bi-trash-fill text-xs"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+
+            return tr;
+        }
+
+        function updateTotalFleetCounter() {
+            const totalRows = document.querySelectorAll('#vehicles-table tbody tr.vehicle-row').length;
+            const totalEl = document.getElementById('fleet-total-count');
+            if (totalEl) totalEl.innerText = totalRows;
+            filterFleetTable();
+        }
+
+        async function submitVehicleFormAjax(e) {
+            e.preventDefault();
+
             const units = window.currentModalUnits.length > 0
                 ? window.currentModalUnits
                 : [{ unit_id: '', license_plate: '-', color_year: '', status: 'tersedia' }];
@@ -790,6 +891,120 @@
                     <input type="hidden" name="units[${i}][status]" value="${escapeHtmlText(u.status)}">
                 `).join('');
             }
+
+            const form = document.getElementById('vehicleFormElement');
+            const submitBtn = document.getElementById('btn-submit-vehicle');
+            const formData = new FormData(form);
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Menyimpan...';
+
+            try {
+                const res = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': CSRF_TOKEN,
+                    },
+                    body: formData,
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    const firstErr = data.errors ? Object.values(data.errors)[0]?.[0] : null;
+                    RentalinPopup.show({
+                        type: 'failed',
+                        title: 'Gagal Menyimpan Armada',
+                        message: firstErr || data.message || 'Periksa kembali isian form armada.',
+                    });
+                    return;
+                }
+
+                // Update / sisipkan baris tabel secara langsung tanpa reload halaman
+                const tbody = document.querySelector('#vehicles-table tbody');
+                const emptyRow = document.getElementById('fleet-empty-row');
+                const newRow = buildVehicleTableRowElement(data.group, data.destroy_url);
+
+                const oldRow = tbody?.querySelector(`tr.vehicle-row[data-group-key="${CSS.escape(data.old_group_key)}"]`)
+                    || tbody?.querySelector(`tr.vehicle-row[data-group-key="${CSS.escape(data.group.group_key)}"]`);
+
+                if (oldRow) {
+                    oldRow.replaceWith(newRow);
+                } else if (emptyRow) {
+                    tbody.insertBefore(newRow, emptyRow);
+                } else if (tbody) {
+                    tbody.appendChild(newRow);
+                }
+
+                updateTotalFleetCounter();
+                RentalinUI.closeModal('vehicleFormModal');
+
+                RentalinPopup.show({
+                    type: 'success',
+                    title: 'Armada Tersimpan',
+                    message: data.message || 'Data armada dan daftar unit berhasil disimpan.',
+                    duration: 4000,
+                });
+            } catch (err) {
+                RentalinPopup.show({
+                    type: 'failed',
+                    title: 'Kesalahan Jaringan',
+                    message: 'Tidak dapat terhubung ke server saat menyimpan armada.',
+                });
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Simpan Armada & Unit';
+            }
+        }
+
+        function confirmDeleteVehicle(destroyUrl, vehicleName) {
+            RentalinPopup.confirm({
+                type: 'warning',
+                title: 'Hapus Armada?',
+                message: `Armada "${vehicleName}" beserta seluruh unit di bawahnya akan dihapus permanen. Lanjutkan?`,
+                confirmText: 'Ya, Hapus',
+                cancelText: 'Tidak',
+                onConfirm: async () => {
+                    try {
+                        const res = await fetch(destroyUrl, {
+                            method: 'DELETE',
+                            headers: {
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': CSRF_TOKEN,
+                            },
+                        });
+                        const data = await res.json();
+
+                        if (!res.ok) {
+                            RentalinPopup.show({
+                                type: 'failed',
+                                title: 'Gagal Menghapus',
+                                message: data.message || 'Armada tidak dapat dihapus.',
+                            });
+                            return;
+                        }
+
+                        const targetRow = document.querySelector(`#vehicles-table tbody tr.vehicle-row[data-group-key="${CSS.escape(data.group_key)}"]`);
+                        if (targetRow) {
+                            targetRow.remove();
+                        }
+                        updateTotalFleetCounter();
+
+                        RentalinPopup.show({
+                            type: 'success',
+                            title: 'Armada Dihapus',
+                            message: data.message || `Armada "${vehicleName}" berhasil dihapus.`,
+                            duration: 4000,
+                        });
+                    } catch (err) {
+                        RentalinPopup.show({
+                            type: 'failed',
+                            title: 'Kesalahan Jaringan',
+                            message: 'Tidak dapat terhubung ke server.',
+                        });
+                    }
+                },
+            });
         }
 
         function filterFleetTable() {

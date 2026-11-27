@@ -117,25 +117,23 @@
                 </p>
             </div>
 
-            <!-- BAWAH: QRIS PEMBAYARAN KOTAK PERSEGI BESAR -->
             <!-- BAWAH: QRIS PEMBAYARAN -->
             <div class="bg-brand-canvas rounded-2xl p-5 sm:p-6 flex flex-col items-center text-center">
                 <span class="text-[11px] font-extrabold uppercase tracking-wider text-brand-pink mb-3">
                     QRIS Pembayaran
                 </span>
-                <div class="bg-white rounded-2xl p-4 sm:p-5 flex items-center justify-center shadow-2xs">
+                <div class="bg-white rounded-2xl p-3 sm:p-4 flex items-center justify-center shadow-2xs">
                     @if(!empty($storeQrisUrl))
-                        <img src="{{ $storeQrisUrl }}" alt="QRIS Pembayaran Rentalin" class="max-h-64 w-auto rounded-xl object-contain">
+                        <img src="{{ $storeQrisUrl }}" alt="QRIS Pembayaran Rentalin" class="w-64 sm:w-80 max-w-full h-auto rounded-xl object-contain">
                     @else
-                        <div id="qris-qrcode-box" class="w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center"></div>
+                        <div id="qris-qrcode-box" class="w-60 h-60 sm:w-72 sm:h-72 flex items-center justify-center"></div>
                     @endif
                 </div>
-                <p class="text-xs text-gray-500 mt-3">
+                <p class="text-xs text-gray-500 mt-3.5">
                     Scan QRIS di atas untuk membayar <strong class="text-brand-ink">Rp {{ number_format($totalAmount, 0, ',', '.') }}</strong>
                 </p>
             </div>
-        </div>
-
+            
         <!-- RINCIAN PENYEWAAN -->
         <div class="bg-brand-canvas rounded-2xl p-4 sm:p-5 space-y-3">
             <p class="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
