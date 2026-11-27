@@ -1,170 +1,29 @@
 <?php
 
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\TransactionController;
+use App\Http\Controllers\Admin\VehicleController;
+use App\Http\Controllers\PublicController;
+
+use App\Models\Rental;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 
 /*
 |--------------------------------------------------------------------------
-| HELPER DATA ARMADA (1 UNIT FISIK = 1 PLAT NOMOR UNIK)
+| HALAMAN PUBLIK (TANPA LOGIN - DATABASE ASLI)
 |--------------------------------------------------------------------------
 */
-$getFleetData = function () {
-    $categories = collect([
-        (object) ['id' => 1, 'name' => 'Mobil MPV', 'slug' => 'mobil-mpv'],
-        (object) ['id' => 2, 'name' => 'City Car', 'slug' => 'city-car'],
-        (object) ['id' => 3, 'name' => 'Motor Matic', 'slug' => 'motor-matic'],
-    ]);
+Route::get('/', [PublicController::class, 'home'])->name('home');
+Route::get('/cara-pesan', [PublicController::class, 'howToOrder'])->name('how-to-order');
+Route::get('/cari-kendaraan', [PublicController::class, 'catalog'])->name('vehicles.catalog');
 
-    $vehicles = collect([
-        (object) [
-            'id' => 1,
-            'name' => 'Toyota Avanza Veloz',
-            'license_plate' => 'L 1428 AB',
-            'year' => 2023,
-            'color' => 'Putih Mutiara',
-            'transmission' => 'Automatic',
-            'fuel_type' => 'Bensin',
-            'spec' => 'Automatic • 7 Kursi • Bensin',
-            'price_per_day' => 350000,
-            'available_stock' => 1,
-            'total_stock' => 1,
-            'status' => 'tersedia',
-            'category' => $categories[0],
-            'images' => ['https://placehold.co/600x450/f3f4f6/1e1e1e?text=Avanza+Veloz+L+1428+AB'],
-        ],
-        (object) [
-            'id' => 2,
-            'name' => 'Toyota Avanza Veloz',
-            'license_plate' => 'L 1890 CD',
-            'year' => 2024,
-            'color' => 'Hitam Metalik',
-            'transmission' => 'Automatic',
-            'fuel_type' => 'Bensin',
-            'spec' => 'Automatic • 7 Kursi • Bensin',
-            'price_per_day' => 350000,
-            'available_stock' => 1,
-            'total_stock' => 1,
-            'status' => 'tersedia',
-            'category' => $categories[0],
-            'images' => ['https://placehold.co/600x450/f3f4f6/1e1e1e?text=Avanza+Veloz+L+1890+CD'],
-        ],
-        (object) [
-            'id' => 3,
-            'name' => 'Honda Brio RS',
-            'license_plate' => 'W 1104 XY',
-            'year' => 2023,
-            'color' => 'Kuning Phoenix',
-            'transmission' => 'Automatic',
-            'fuel_type' => 'Bensin',
-            'spec' => 'Automatic • 5 Kursi • Irit BBM',
-            'price_per_day' => 275000,
-            'available_stock' => 1,
-            'total_stock' => 1,
-            'status' => 'tersedia',
-            'category' => $categories[1],
-            'images' => ['https://placehold.co/600x450/f3f4f6/1e1e1e?text=Honda+Brio+W+1104+XY'],
-        ],
-        (object) [
-            'id' => 4,
-            'name' => 'Yamaha NMAX 155 ABS',
-            'license_plate' => 'L 4512 KL',
-            'year' => 2024,
-            'color' => 'Matte Black',
-            'transmission' => 'Automatic',
-            'fuel_type' => 'Bensin',
-            'spec' => 'Automatic • 155cc • 2 Helm + Jas Hujan',
-            'price_per_day' => 120000,
-            'available_stock' => 1,
-            'total_stock' => 1,
-            'status' => 'tersedia',
-            'category' => $categories[2],
-            'images' => ['https://placehold.co/600x450/f3f4f6/1e1e1e?text=Yamaha+NMAX+L+4512+KL'],
-        ],
-        (object) [
-            'id' => 5,
-            'name' => 'Mitsubishi Xpander Ultimate',
-            'license_plate' => 'L 1995 MN',
-            'year' => 2023,
-            'color' => 'Silver Blade',
-            'transmission' => 'Automatic',
-            'fuel_type' => 'Bensin',
-            'spec' => 'Automatic • 7 Kursi • Cruise Control',
-            'price_per_day' => 425000,
-            'available_stock' => 0,
-            'total_stock' => 1,
-            'status' => 'maintenance',
-            'category' => $categories[0],
-            'images' => ['https://placehold.co/600x450/f3f4f6/1e1e1e?text=Xpander+L+1995+MN'],
-        ],
-    ]);
-
-    return [$categories, $vehicles];
-};
-
-$makeDummyRental = function ($code, $vehicle) {
-    $payment = (object) [
-        'method' => 'Transfer Bank / QRIS',
-        'payment_method' => 'Transfer Bank / QRIS',
-        'amount' => 700000,
-        'status' => 'pending',
-        'payment_status' => 'pending',
-        'proof_image' => null,
-        'paid_at' => null,
-    ];
-
-    return (object) [
-        'id' => 1,
-        'booking_code' => strtoupper($code),
-        'customer_name' => 'Budi Santoso',
-        'customer_phone' => '081234567890',
-        'customer_ktp' => '3578012345678901',
-        'vehicle' => $vehicle,
-        'payment' => $payment,
-        'pickup_date' => now(),
-        'return_date' => now()->addDays(2),
-        'duration_days' => 2,
-        'total_price' => 700000,
-        'payment_status' => 'pending',
-        'payment_proof' => null,
-        'status' => 'menunggu_pembayaran',
-        'notes' => 'Ambil unit di garasi utama pukul 09.00 WIB.',
-        'created_at' => now(),
-    ];
-};
-
-/*
-|--------------------------------------------------------------------------
-| HALAMAN PUBLIK (TANPA LOGIN)
-|--------------------------------------------------------------------------
-*/
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
-
-Route::get('/cara-pesan', function () {
-    return view('how-to-order');
-})->name('how-to-order');
-
-Route::get('/cari-kendaraan', function () use ($getFleetData) {
-    [$categories, $vehicles] = $getFleetData();
-    return view('catalog', compact('categories', 'vehicles'));
-})->name('vehicles.catalog');
-
-Route::post('/booking', function (Request $request) {
-    $code = 'RNTL-' . strtoupper(substr(md5(uniqid()), 0, 6));
-    return redirect()->route('booking.invoice', $code);
-})->name('booking.store');
-
-Route::get('/nota/{code}', function ($code) use ($getFleetData, $makeDummyRental) {
-    [, $vehicles] = $getFleetData();
-    $rental = $makeDummyRental($code, $vehicles->first());
-
-    return view('invoice', [
-        'code' => strtoupper($code),
-        'rental' => $rental,
-    ]);
-})->name('booking.invoice');
+Route::post('/booking', [PublicController::class, 'storeBooking'])->name('booking.store');
+Route::get('/nota/{code}', [PublicController::class, 'invoice'])->name('booking.invoice');
+Route::post('/nota/{code}/upload-proof', [PublicController::class, 'uploadPaymentProof'])->name('portal.payment.upload');
+Route::get('/cek-nota', [PublicController::class, 'checkBooking'])->name('booking.check');
 
 /*
 |--------------------------------------------------------------------------
@@ -184,7 +43,7 @@ Route::get('/portal/login', function () {
 
 Route::post('/login', function (Request $request) {
     $credentials = $request->validate([
-        'email' => ['required', 'email'],
+        'email'    => ['required', 'email'],
         'password' => ['required'],
     ]);
 
@@ -210,60 +69,28 @@ Route::post('/logout', function (Request $request) {
 | PORTAL ADMIN (/portal/...)
 |--------------------------------------------------------------------------
 */
-Route::prefix('portal')->name('admin.')->group(function () use ($getFleetData, $makeDummyRental) {
-    // Ringkasan Dashboard Utama Admin
-    Route::get('/dashboard', function () use ($getFleetData) {
-        [$categories, $vehicles] = $getFleetData();
+Route::prefix('portal')->name('admin.')->middleware('auth')->group(function () {
+    // Ringkasan Dashboard Utama & Upload QRIS Toko
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('/settings/qris', [DashboardController::class, 'uploadQris'])->name('qris.upload');
+    Route::post('/settings/qris/reset', [DashboardController::class, 'resetQris'])->name('qris.reset');
 
-        $stats = [
-            'revenue'   => 700000,
-            'rented'    => 1,
-            'pending'   => 1,
-            'available' => $vehicles->where('status', 'tersedia')->count(),
-        ];
-
-        return view('admin.dashboard', compact('vehicles', 'categories', 'stats'));
-    })->name('dashboard');
-
-    // Halaman Khusus Transaksi & Scan QR
-    Route::get('/transactions', function () use ($getFleetData) {
-        [$categories, $vehicles] = $getFleetData();
-        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.transaction';
-
-        return view($viewName, compact('categories', 'vehicles'));
-    })->name('transactions');
-
-    // Alias Scan QR -> mengarah ke view transaksi yang sama
-    Route::get('/scan', function () use ($getFleetData) {
-        [$categories, $vehicles] = $getFleetData();
-        $viewName = view()->exists('admin.transactions') ? 'admin.transactions' : 'admin.transaction';
-
-        return view($viewName, compact('categories', 'vehicles'));
-    })->name('scan');
+    // Transaksi, Verifikasi QRIS Semi-Manual, Serah Terima & Pengembalian Unit
+    Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions');
+    Route::get('/scan', [TransactionController::class, 'index'])->name('scan');
+    Route::post('/transactions/{code}/confirm-payment', [TransactionController::class, 'confirmPayment'])->name('transactions.confirm-payment');
+    Route::post('/transactions/{code}/confirm-pickup', [TransactionController::class, 'confirmPickup'])->name('transactions.confirm-pickup');
+    Route::post('/transactions/{code}/confirm-return', [TransactionController::class, 'confirmReturn'])->name('transactions.confirm-return');
 
     // Halaman Cetak / Detail Nota Admin
-    Route::get('/invoice/{code?}', function ($code = 'RNTL-DEMO01') use ($getFleetData, $makeDummyRental) {
-        [, $vehicles] = $getFleetData();
-        $rental = $makeDummyRental($code, $vehicles->first());
+    Route::get('/invoice/{code?}', [PublicController::class, 'invoice'])->name('invoice');
 
-        return view('admin.invoice', [
-            'code' => strtoupper($code),
-            'rental' => $rental,
-        ]);
-    })->name('invoice');
+    // Kelola Armada & Kategori (Database Asli)
+    Route::get('/vehicles', [VehicleController::class, 'index'])->name('vehicles.index');
+    Route::post('/vehicles', [VehicleController::class, 'store'])->name('vehicles.store');
+    Route::delete('/vehicles/{id}', [VehicleController::class, 'destroy'])->name('vehicles.destroy');
 
-    // Kelola Armada (Per Unit Fisik + Plat Nomor)
-    Route::get('/vehicles', function () use ($getFleetData) {
-        [$categories, $vehicles] = $getFleetData();
-        $viewName = view()->exists('vehicles.index') ? 'vehicles.index' : 'admin.vehicles.index';
-        return view($viewName, compact('categories', 'vehicles'));
-    })->name('vehicles.index');
-
-    Route::post('/vehicles', function (Request $request) {
-        return back()->with('success', 'Unit armada baru berhasil ditambahkan.');
-    })->name('vehicles.store');
-
-    Route::delete('/vehicles/{id}', function ($id) {
-        return back()->with('success', 'Unit armada berhasil dihapus.');
-    })->name('vehicles.destroy');
+    Route::post('/categories', [VehicleController::class, 'storeCategory'])->name('categories.store');
+    Route::put('/categories/{category}', [VehicleController::class, 'updateCategory'])->name('categories.update');
+    Route::delete('/categories/{category}', [VehicleController::class, 'destroyCategory'])->name('categories.destroy');
 });

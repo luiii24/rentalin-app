@@ -5,70 +5,12 @@
 
 @section('content')
     @php
-        $sampleReceiptSvg = 'data:image/svg+xml;utf8,' . rawurlencode('
-            <svg xmlns="http://www.w3.org/2000/svg" width="360" height="440" viewBox="0 0 360 440">
-                <rect width="360" height="440" rx="20" fill="#F8FAFC"/>
-                <rect x="20" y="20" width="320" height="400" rx="16" fill="#FFFFFF" stroke="#E2E8F0"/>
-                <circle cx="180" cy="64" r="22" fill="#10B981" fill-opacity="0.15"/>
-                <path d="M171 64l6 6 12-12" stroke="#10B981" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-                <text x="180" y="106" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="bold" fill="#0F172A">PEMBAYARAN QRIS BERHASIL</text>
-                <text x="180" y="132" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="bold" fill="#FF385C">Rp 700.000</text>
-                <line x1="40" y1="154" x2="320" y2="154" stroke="#E2E8F0" stroke-dasharray="5,5"/>
-                <text x="44" y="182" font-family="sans-serif" font-size="11" fill="#64748B">Merchant</text>
-                <text x="316" y="182" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="bold" fill="#0F172A">RENTALIN SURABAYA</text>
-                <text x="44" y="210" font-family="sans-serif" font-size="11" fill="#64748B">Pengirim</text>
-                <text x="316" y="210" text-anchor="end" font-family="sans-serif" font-size="11" font-weight="bold" fill="#0F172A">BUDI SANTOSO</text>
-                <text x="44" y="238" font-family="sans-serif" font-size="11" fill="#64748B">Referensi</text>
-                <text x="316" y="238" text-anchor="end" font-family="monospace" font-size="11" font-weight="bold" fill="#0F172A">RNTL-DEMO01</text>
-                <rect x="44" y="280" width="272" height="44" rx="10" fill="#F1F5F9"/>
-                <text x="180" y="306" text-anchor="middle" font-family="monospace" font-size="11" fill="#475569">RRN: 2026112688492014</text>
-            </svg>
-        ');
-
-        $dummyRentals = [
-            (object) [
-                'id'              => 1,
-                'booking_code'    => 'RNTL-DEMO01',
-                'customer_name'   => 'Budi Santoso',
-                'customer_phone'  => '081234567890',
-                'vehicle_name'    => 'Toyota Avanza Veloz',
-                'license_plate'   => 'L 1428 AB',
-                'pickup_date'     => date('Y-m-d') . ' 14:42:36',
-                'duration_days'   => 2,
-                'total_amount'    => 700000,
-                'status'          => 'menunggu_konfirmasi',
-                'payment_proof'   => $sampleReceiptSvg,
-                'is_paid'         => false,
-                'is_picked_up'    => false,
-                'collateral_type' => null,
-            ],
-            (object) [
-                'id'              => 2,
-                'booking_code'    => 'RNTL-DEMO02',
-                'customer_name'   => 'Siti Aminah',
-                'customer_phone'  => '085712349876',
-                'vehicle_name'    => 'Honda Brio RS',
-                'license_plate'   => 'L 1890 XY',
-                'pickup_date'     => date('Y-m-d') . ' 09:15:00',
-                'duration_days'   => 1,
-                'total_amount'    => 300000,
-                'status'          => 'menunggu_pembayaran',
-                'payment_proof'   => null,
-                'is_paid'         => false,
-                'is_picked_up'    => false,
-                'collateral_type' => null,
-            ],
-        ];
-
-        $rentalCollection = isset($rentals) && count($rentals) > 0 ? collect($rentals) : collect($dummyRentals);
+        $rentalCollection = isset($rentals) ? collect($rentals) : collect();
         $normalizedRentals = $rentalCollection->map(function ($r) {
-            $statusRaw = strtolower($r->status ?? 'menunggu_pembayaran');
-            $isPaid = isset($r->is_paid)
-                ? (bool) $r->is_paid
-                : in_array($statusRaw, ['lunas', 'paid', 'siap_diambil', 'disewa', 'aktif', 'selesai']);
-            $isPickedUp = isset($r->is_picked_up)
-                ? (bool) $r->is_picked_up
-                : in_array($statusRaw, ['disewa', 'aktif', 'selesai']);
+            $statusRaw   = strtolower($r->status ?? 'pending');
+            $isCompleted = $statusRaw === 'completed';
+            $isPickedUp  = in_array($statusRaw, ['active', 'completed', 'disewa', 'aktif', 'selesai']);
+            $isPaid      = ($r->payment?->payment_status === 'paid') || $isPickedUp;
 
             $proofRaw = $r->payment_proof ?? null;
             $proofUrl = null;
@@ -83,17 +25,22 @@
                 'booking_code'    => $r->booking_code ?? 'RNTL-DEMO01',
                 'customer_name'   => $r->customer_name ?? 'Pelanggan',
                 'customer_phone'  => $r->customer_phone ?? '-',
-                'vehicle_name'    => $r->vehicle_name ?? ($r->vehicle->name ?? 'Unit Armada'),
-                'license_plate'   => $r->license_plate ?? ($r->vehicle->license_plate ?? ''),
-                'pickup_date'     => $r->pickup_date ?? date('Y-m-d H:i:s'),
-                'duration_days'   => $r->duration_days ?? 1,
-                'total_amount'    => (int) ($r->total_amount ?? ($r->total_price ?? 0)),
+                'vehicle_name'    => $r->vehicle?->name ?? 'Unit Armada',
+                'license_plate'   => $r->vehicle?->license_plate ?? '',
+                'pickup_date'     => isset($r->pickup_date) ? \Carbon\Carbon::parse($r->pickup_date)->format('Y-m-d H:i:s') : date('Y-m-d H:i:s'),
+                'duration_days'   => (int) ($r->duration_days ?? 1),
+                'total_amount'    => (int) ($r->total_price ?? 0),
                 'payment_proof'   => $proofUrl,
                 'is_paid'         => $isPaid,
                 'is_picked_up'    => $isPickedUp,
+                'is_completed'    => $isCompleted,
                 'collateral_type' => $r->collateral_type ?? null,
             ];
         })->values();
+
+        $initialCode = !empty($selectedCode)
+            ? $selectedCode
+            : ($normalizedRentals[0]['booking_code'] ?? '');
     @endphp
 
     <!-- PANEL SCAN & CEK TRANSAKSI -->
@@ -117,15 +64,15 @@
                 </button>
 
                 <div id="qr-camera-box" class="hidden bg-brand-canvas rounded-2xl p-4 mb-4 text-center">
-                    <video id="qr-video-stream" class="w-full h-40 object-cover rounded-xl bg-black mb-2" autoplay playsinline muted></video>
-                    <p class="text-[11px] text-gray-500">Arahkan QR Nota Digital pelanggan ke kamera</p>
+                    <div id="qr-reader-viewport" class="w-full overflow-hidden rounded-xl bg-black mb-2"></div>
+                    <p class="text-[11px] text-gray-500">Arahkan QR / Barcode Nota Digital pelanggan ke kamera</p>
                 </div>
             </div>
 
             <div>
                 <label class="block text-xs font-extrabold text-brand-ink mb-2">Atau Masukkan Kode Booking</label>
                 <form onsubmit="lookupBookingFromInput(event)" class="flex items-center gap-2">
-                    <input type="text" id="scan-code-input" value="{{ $normalizedRentals[0]['booking_code'] ?? 'RNTL-DEMO01' }}"
+                    <input type="text" id="scan-code-input" value="{{ $initialCode }}"
                         placeholder="RNTL-XXXXXX"
                         class="flex-1 rounded-full px-4 py-3 font-mono text-xs font-extrabold uppercase">
                     <button type="submit"
@@ -136,24 +83,24 @@
             </div>
         </div>
 
-        <!-- KANAN: DETAIL TRANSAKSI & 2 TOMBOL KONFIRMASI -->
+        <!-- KANAN: DETAIL TRANSAKSI & TOMBOL KONFIRMASI -->
         <div class="lg:col-span-7 bg-white rounded-3xl p-6 flex flex-col justify-between">
             <div>
                 <div class="flex items-start justify-between gap-3 mb-4">
                     <div>
                         <p class="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Kode Transaksi</p>
                         <h3 id="detail-booking-code" class="font-mono text-xl font-extrabold text-brand-pink mt-0.5">
-                            RNTL-DEMO01
+                            {{ $initialCode ?: '-' }}
                         </h3>
                     </div>
 
                     <div class="flex items-center gap-2">
                         <span id="detail-status-badge"
-                            class="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-blue-500/15 text-blue-600 dark:text-blue-400">
-                            Menunggu Konfirmasi
+                            class="px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                            Menunggu Pembayaran
                         </span>
                         <a id="detail-invoice-link"
-                           href="{{ url('/portal/invoice/RNTL-DEMO01') }}"
+                           href="{{ $initialCode ? route('admin.invoice', $initialCode) : '#' }}"
                            target="_blank"
                            title="Buka Nota Digital"
                            class="w-8 h-8 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink flex items-center justify-center transition">
@@ -165,14 +112,14 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
                     <div class="bg-brand-canvas rounded-2xl p-3.5">
                         <p class="text-[11px] font-semibold text-gray-400">Penyewa</p>
-                        <p id="detail-customer-name" class="text-sm font-extrabold text-brand-ink mt-0.5">Budi Santoso</p>
-                        <p id="detail-customer-phone" class="text-xs text-gray-500 mt-0.5">081234567890</p>
+                        <p id="detail-customer-name" class="text-sm font-extrabold text-brand-ink mt-0.5">-</p>
+                        <p id="detail-customer-phone" class="text-xs text-gray-500 mt-0.5">-</p>
                     </div>
 
                     <div class="bg-brand-canvas rounded-2xl p-3.5">
                         <p class="text-[11px] font-semibold text-gray-400">Unit Armada</p>
-                        <p id="detail-vehicle-name" class="text-sm font-extrabold text-brand-ink mt-0.5">Toyota Avanza Veloz</p>
-                        <p id="detail-schedule-info" class="text-xs text-gray-500 mt-0.5">{{ date('Y-m-d') }} 14:42:36 (2 Hari)</p>
+                        <p id="detail-vehicle-name" class="text-sm font-extrabold text-brand-ink mt-0.5">-</p>
+                        <p id="detail-schedule-info" class="text-xs text-gray-500 mt-0.5">-</p>
                     </div>
                 </div>
             </div>
@@ -180,11 +127,11 @@
             <div class="pt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <p class="text-[11px] font-semibold text-gray-400">Total Tagihan</p>
-                    <p id="detail-total-amount" class="text-xl font-extrabold text-brand-ink">Rp 700.000</p>
+                    <p id="detail-total-amount" class="text-xl font-extrabold text-brand-ink">Rp 0</p>
                     <p id="detail-collateral-info" class="hidden text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5"></p>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2.5">
+                <div class="flex flex-wrap items-center gap-2">
                     <button type="button" id="btn-confirm-payment" onclick="openConfirmPaymentModal()"
                         class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold transition-all cursor-pointer">
                         <i id="icon-confirm-payment" class="bi bi-check2-circle"></i>
@@ -196,6 +143,12 @@
                         class="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-gray-200 dark:bg-white/10 text-gray-400 text-xs font-extrabold cursor-not-allowed transition-all">
                         <i id="icon-confirm-pickup" class="bi bi-lock-fill"></i>
                         <span id="label-confirm-pickup">Unit Sudah Diambil</span>
+                    </button>
+
+                    <button type="button" id="btn-confirm-return" onclick="submitConfirmReturn()"
+                        class="hidden inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-extrabold transition-all cursor-pointer">
+                        <i class="bi bi-arrow-return-left"></i>
+                        <span>Selesaikan &amp; Kembali</span>
                     </button>
                 </div>
             </div>
@@ -233,6 +186,7 @@
                             'menunggu_pembayaran' => 'Menunggu Pembayaran',
                             'siap_diambil' => 'Lunas / Siap Diambil',
                             'disewa' => 'Sedang Disewa',
+                            'selesai' => 'Selesai',
                         ]"
                         selected="all"
                         onchange="filterTransactionsTable"
@@ -253,11 +207,13 @@
     ]">
         @foreach($normalizedRentals as $item)
             @php
-                $rowState = $item['is_picked_up']
-                    ? 'disewa'
-                    : ($item['is_paid']
-                        ? 'siap_diambil'
-                        : (!empty($item['payment_proof']) ? 'menunggu_konfirmasi' : 'menunggu_pembayaran'));
+                $rowState = $item['is_completed']
+                    ? 'selesai'
+                    : ($item['is_picked_up']
+                        ? 'disewa'
+                        : ($item['is_paid']
+                            ? 'siap_diambil'
+                            : (!empty($item['payment_proof']) ? 'menunggu_konfirmasi' : 'menunggu_pembayaran')));
                 $searchHaystack = strtolower(
                     $item['booking_code'] . ' ' .
                     $item['customer_name'] . ' ' .
@@ -297,7 +253,9 @@
                     Rp {{ number_format($item['total_amount'], 0, ',', '.') }}
                 </td>
                 <td class="py-3.5 px-4" data-sort="{{ $rowState }}">
-                    @if($rowState === 'disewa')
+                    @if($rowState === 'selesai')
+                        <x-badge variant="neutral" :dot="true" class="row-status-badge">Selesai</x-badge>
+                    @elseif($rowState === 'disewa')
                         <x-badge variant="success" :dot="true" class="row-status-badge">Sedang Disewa</x-badge>
                     @elseif($rowState === 'siap_diambil')
                         <x-badge variant="success" :dot="true" class="row-status-badge">Siap Diambil</x-badge>
@@ -315,7 +273,7 @@
                 </td>
             </tr>
         @endforeach
-        <tr id="tx-empty-row" data-empty-row="true" class="hidden">
+        <tr id="tx-empty-row" data-empty-row="true" class="{{ count($normalizedRentals) === 0 ? '' : 'hidden' }}">
             <td colspan="8" class="py-10 text-center text-xs text-gray-400">
                 Tidak ada transaksi yang cocok dengan pencarian atau filter status.
             </td>
@@ -344,11 +302,11 @@
             <div class="bg-brand-canvas rounded-2xl p-4 mb-4 space-y-2 text-xs">
                 <div class="flex justify-between">
                     <span class="text-gray-500">Kode Booking</span>
-                    <span id="pay-modal-code" class="font-mono font-extrabold text-brand-pink">RNTL-DEMO01</span>
+                    <span id="pay-modal-code" class="font-mono font-extrabold text-brand-pink">-</span>
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Penyewa</span>
-                    <span id="pay-modal-customer" class="font-bold text-brand-ink">Budi Santoso</span>
+                    <span id="pay-modal-customer" class="font-bold text-brand-ink">-</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span class="text-gray-500">Status Pembayaran</span>
@@ -358,7 +316,7 @@
                 </div>
                 <div class="flex justify-between">
                     <span class="text-gray-500">Nominal Pembayaran</span>
-                    <span id="pay-modal-amount" class="font-extrabold text-brand-ink">Rp 700.000</span>
+                    <span id="pay-modal-amount" class="font-extrabold text-brand-ink">Rp 0</span>
                 </div>
             </div>
 
@@ -430,9 +388,9 @@
                 <div class="bg-brand-canvas rounded-2xl p-3.5 text-xs flex items-center justify-between">
                     <div>
                         <p class="text-[10px] font-bold uppercase text-gray-400">Penyerahan Unit</p>
-                        <p id="pickup-modal-vehicle" class="font-extrabold text-brand-ink mt-0.5">Toyota Avanza Veloz</p>
+                        <p id="pickup-modal-vehicle" class="font-extrabold text-brand-ink mt-0.5">-</p>
                     </div>
-                    <span id="pickup-modal-code" class="font-mono font-extrabold text-brand-pink">RNTL-DEMO01</span>
+                    <span id="pickup-modal-code" class="font-mono font-extrabold text-brand-pink">-</span>
                 </div>
 
                 <div>
@@ -478,7 +436,7 @@
                         class="flex-1 py-3 rounded-full bg-brand-canvas hover:opacity-85 text-brand-ink text-xs font-extrabold transition cursor-pointer">
                         Batal
                     </button>
-                    <button type="submit"
+                    <button type="submit" id="btn-submit-pickup"
                         class="flex-[2] py-3 rounded-full bg-brand-pink hover:bg-brand-pinkHover active:scale-95 text-white text-xs font-extrabold transition-all cursor-pointer">
                         Konfirmasi Unit Diambil
                     </button>
@@ -489,17 +447,18 @@
 
     <script>
         (function() {
+            const TX_CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || "{{ csrf_token() }}";
+            window.TX_CSRF = TX_CSRF;
             window.dashboardRentals = @json($normalizedRentals);
-            window.dashboardRentals.forEach(item => {
-                const localProof = localStorage.getItem(`rentalin_proof_${item.booking_code}`);
-                if (localProof) item.payment_proof = localProof;
-            });
 
-            window.selectedRental = window.dashboardRentals[0] || null;
-            window.activeVideoStream = null;
+            const requestedCode = @json($initialCode);
+            const preselected = window.dashboardRentals.find(r => r.booking_code.toUpperCase() === requestedCode);
+            window.selectedRental = preselected || window.dashboardRentals[0] || null;
+            window.html5QrScanner = null;
         })();
 
         function getRentalState(rental) {
+            if (rental.is_completed) return 'selesai';
             if (rental.is_picked_up) return 'disewa';
             if (rental.is_paid) return 'siap_diambil';
             if (rental.payment_proof) return 'menunggu_konfirmasi';
@@ -527,6 +486,7 @@
             const btnPickup   = document.getElementById('btn-confirm-pickup');
             const iconPickup  = document.getElementById('icon-confirm-pickup');
             const labelPickup = document.getElementById('label-confirm-pickup');
+            const btnReturn   = document.getElementById('btn-confirm-return');
             const colInfo     = document.getElementById('detail-collateral-info');
 
             if (rental.collateral_type) {
@@ -562,7 +522,7 @@
                 btnPickup.disabled = true;
                 btnPickup.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-extrabold cursor-default';
                 iconPickup.className = 'bi bi-car-front-fill';
-                labelPickup.innerText = 'Unit Sudah Diambil';
+                labelPickup.innerText = rental.is_completed ? 'Sewa Selesai' : 'Unit Sudah Diambil';
             } else {
                 btnPickup.disabled = false;
                 btnPickup.className = 'inline-flex items-center justify-center gap-2 px-4 py-3 rounded-full bg-brand-yellow hover:opacity-90 active:scale-95 text-[#1E1E1E] text-xs font-extrabold transition-all cursor-pointer';
@@ -570,7 +530,18 @@
                 labelPickup.innerText = 'Unit Sudah Diambil';
             }
 
-            if (state === 'disewa') {
+            if (btnReturn) {
+                if (rental.is_picked_up && !rental.is_completed) {
+                    btnReturn.classList.remove('hidden');
+                } else {
+                    btnReturn.classList.add('hidden');
+                }
+            }
+
+            if (state === 'selesai') {
+                statusBadge.className = 'px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300';
+                statusBadge.innerText = 'Sewa Selesai';
+            } else if (state === 'disewa') {
                 statusBadge.className = 'px-3 py-1 rounded-full text-[11px] font-extrabold uppercase bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
                 statusBadge.innerText = 'Sedang Disewa';
             } else if (state === 'siap_diambil') {
@@ -596,7 +567,10 @@
             row.dataset.state = state;
 
             if (badge) {
-                if (state === 'disewa') {
+                if (state === 'selesai') {
+                    badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-gray-200/80 dark:bg-white/10 text-gray-600 dark:text-gray-300';
+                    badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span> Selesai';
+                } else if (state === 'disewa') {
                     badge.className = 'row-status-badge inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold whitespace-nowrap bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
                     badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Sedang Disewa';
                 } else if (state === 'siap_diambil') {
@@ -682,12 +656,39 @@
                 : 'flex-[2] py-3 rounded-full bg-gray-200 dark:bg-white/10 text-gray-400 text-xs font-extrabold cursor-not-allowed transition-all';
         }
 
-        function submitConfirmPayment() {
+        async function submitConfirmPayment() {
             const cb = document.getElementById('legal-payment-checkbox');
-            if (!window.selectedRental || !window.selectedRental.payment_proof || !cb.checked) return;
-            window.selectedRental.is_paid = true;
-            RentalinUI.closeModal('confirmPaymentModal');
-            renderSelectedRentalPanel();
+            const rental = window.selectedRental;
+            if (!rental || !rental.payment_proof || !cb.checked) return;
+
+            const btn = document.getElementById('btn-submit-legal-payment');
+            btn.disabled = true;
+            btn.innerText = 'Menyimpan...';
+
+            try {
+                const res = await fetch(`/portal/transactions/${encodeURIComponent(rental.booking_code)}/confirm-payment`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': window.TX_CSRF,
+                    },
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Gagal mengonfirmasi pembayaran.');
+                    btn.disabled = false;
+                    btn.innerText = 'Ya, Konfirmasi Sah';
+                    return;
+                }
+
+                rental.is_paid = true;
+                RentalinUI.closeModal('confirmPaymentModal');
+                renderSelectedRentalPanel();
+            } catch (err) {
+                alert('Terjadi kesalahan jaringan.');
+            } finally {
+                btn.innerText = 'Ya, Konfirmasi Sah';
+            }
         }
 
         function openConfirmPickupModal() {
@@ -719,13 +720,69 @@
             document.getElementById('collateral-file-name').innerText = file.name;
         }
 
-        function submitConfirmPickup(e) {
+        async function submitConfirmPickup(e) {
             e.preventDefault();
-            if (!window.selectedRental || !window.selectedRental.is_paid) return;
-            window.selectedRental.is_picked_up = true;
-            window.selectedRental.collateral_type = document.getElementById('pickup-collateral-type')?.value || 'KTP Asli';
-            RentalinUI.closeModal('confirmPickupModal');
-            renderSelectedRentalPanel();
+            const rental = window.selectedRental;
+            if (!rental || !rental.is_paid) return;
+
+            const form = document.getElementById('confirmPickupForm');
+            const submitBtn = document.getElementById('btn-submit-pickup');
+            const formData = new FormData(form);
+
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Mengunggah...';
+
+            try {
+                const res = await fetch(`/portal/transactions/${encodeURIComponent(rental.booking_code)}/confirm-pickup`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': window.TX_CSRF,
+                    },
+                    body: formData,
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Gagal mengonfirmasi pengambilan unit.');
+                    return;
+                }
+
+                rental.is_picked_up = true;
+                rental.collateral_type = data.collateral_type || formData.get('collateral_type') || 'KTP Asli';
+                RentalinUI.closeModal('confirmPickupModal');
+                renderSelectedRentalPanel();
+            } catch (err) {
+                alert('Terjadi kesalahan jaringan saat mengunggah bukti jaminan.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Konfirmasi Unit Diambil';
+            }
+        }
+
+        async function submitConfirmReturn() {
+            const rental = window.selectedRental;
+            if (!rental || !rental.is_picked_up || rental.is_completed) return;
+            if (!confirm(`Selesaikan sewa ${rental.booking_code} dan kembalikan unit ${rental.vehicle_name} ke stok tersedia?`)) return;
+
+            try {
+                const res = await fetch(`/portal/transactions/${encodeURIComponent(rental.booking_code)}/confirm-return`, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': window.TX_CSRF,
+                    },
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    alert(data.message || 'Gagal menyelesaikan pengembalian unit.');
+                    return;
+                }
+
+                rental.is_completed = true;
+                renderSelectedRentalPanel();
+            } catch (err) {
+                alert('Terjadi kesalahan jaringan.');
+            }
         }
 
         function filterTransactionsTable(statusOverride) {
@@ -745,26 +802,42 @@
 
         async function toggleCameraPreview() {
             const box = document.getElementById('qr-camera-box');
-            const video = document.getElementById('qr-video-stream');
             const label = document.getElementById('cam-btn-label');
 
             if (!box.classList.contains('hidden')) {
                 box.classList.add('hidden');
                 label.innerText = 'Buka Kamera Scan';
-                if (window.activeVideoStream) {
-                    window.activeVideoStream.getTracks().forEach(t => t.stop());
-                    window.activeVideoStream = null;
+                if (window.html5QrScanner) {
+                    try { await window.html5QrScanner.stop(); } catch (e) {}
+                    window.html5QrScanner = null;
                 }
                 return;
             }
 
+            if (typeof Html5Qrcode === 'undefined') {
+                alert('Library scanner kamera belum siap.');
+                return;
+            }
+
+            box.classList.remove('hidden');
+            label.innerText = 'Tutup Kamera Scan';
+
             try {
-                window.activeVideoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-                video.srcObject = window.activeVideoStream;
-                box.classList.remove('hidden');
-                label.innerText = 'Tutup Kamera Scan';
+                window.html5QrScanner = new Html5Qrcode('qr-reader-viewport');
+                await window.html5QrScanner.start(
+                    { facingMode: 'environment' },
+                    { fps: 10, qrbox: { width: 220, height: 140 } },
+                    (decodedText) => {
+                        const match = String(decodedText).match(/RNTL-[A-Z0-9]+/i);
+                        const code = match ? match[0].toUpperCase() : decodedText.trim().toUpperCase();
+                        selectTransactionByCode(code);
+                        toggleCameraPreview();
+                    }
+                );
             } catch (err) {
-                alert('Kamera tidak tersedia atau izin ditolak browser.');
+                box.classList.add('hidden');
+                label.innerText = 'Buka Kamera Scan';
+                alert('Kamera tidak tersedia atau izin kamera ditolak browser.');
             }
         }
 
